@@ -9,8 +9,8 @@ const lexend = Lexend({
 });
 
 export const metadata: Metadata = {
-  title: 'DSM Dashboard - District Success Manager',
-  description: 'Summit K12 District Success Manager Dashboard',
+  title: 'Summit Intel - CCMR Dashboard',
+  description: 'Summit Intel College, Career & Military Readiness Dashboard',
   generator: 'v0.app',
 }
 
