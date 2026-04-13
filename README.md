@@ -34,3 +34,4 @@ To learn more, take a look at the following resources:
 
 <a href="https://v0.app/chat/api/kiro/clone/snowpilot85/summit-intel-prototype-wm" alt="Open in Kiro"><img src="https://pdgvvgmkdvyeydso.public.blob.vercel-storage.com/open%20in%20kiro.svg?sanitize=true" /></a>
 # summit-intel
+# summit-intel
