@@ -1,4 +1,17 @@
 import type { TypedSupabaseClient, UserProfileRow } from '@/types/database'
+import { createAdminClient } from '@/utils/supabase/admin'
+
+/**
+ * Thrown when the auth user exists but has no matching user_profiles row.
+ * Caught by the /pathways error boundary to show a setup error instead of
+ * looping back to /login.
+ */
+export class ProfileNotFoundError extends Error {
+  constructor() {
+    super('No user_profiles row found for this auth user.')
+    this.name = 'ProfileNotFoundError'
+  }
+}
 
 export interface UserContext {
   profile: UserProfileRow
@@ -20,17 +33,24 @@ export async function getUserContext(
   } = await client.auth.getUser()
   if (!user) return null
 
-  const { data: profile } = await client
+  // Use admin client for these lookups — the user_profiles RLS policy calls
+  // auth_user_district_id() which itself queries user_profiles, causing a
+  // recursive evaluation that returns 0 rows on the first authenticated request.
+  const admin = createAdminClient()
+
+  const { data: profile } = await admin
     .from('user_profiles')
     .select('*')
     .eq('id', user.id)
     .single()
 
-  if (!profile) return null
+  // Authenticated but no profile row — throw so callers can distinguish this
+  // from "not authenticated" and avoid a /login ↔ /pathways redirect loop.
+  if (!profile) throw new ProfileNotFoundError()
 
   const [districtResult, schoolYearResult] = await Promise.all([
-    client.from('districts').select('name').eq('id', profile.district_id).single(),
-    client
+    admin.from('districts').select('name').eq('id', profile.district_id).single(),
+    admin
       .from('school_years')
       .select('label, graduation_date')
       .eq('district_id', profile.district_id)
@@ -57,7 +77,9 @@ export async function getAuthDistrictId(client: TypedSupabaseClient): Promise<st
   } = await client.auth.getUser()
   if (!user) throw new Error('Not authenticated')
 
-  const { data: profile, error } = await client
+  // Use admin client for the same reason as getUserContext above
+  const admin = createAdminClient()
+  const { data: profile, error } = await admin
     .from('user_profiles')
     .select('district_id')
     .eq('id', user.id)

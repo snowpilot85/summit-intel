@@ -25,32 +25,121 @@ import type { DataUploadRow, IndicatorType, UploadSourceType } from "@/types/dat
 // REGION 13 COLUMN MAP
 // ============================================
 
-/** Maps exact Region 13 column header → Summit Pathways DB field */
-const REGION13_HEADERS: Record<string, IndicatorType | "__identity__"> = {
-  "TSI RDG": "tsi_reading",
-  "TSI Math": "tsi_math",
-  "SAT RDG": "sat_reading",
-  "SAT Math": "sat_math",
-  "ACT RDG": "act_reading",
-  "ACT Math": "act_math",
-  "College Prep ELA": "college_prep_ela",
-  "College Prep Math": "college_prep_math",
-  "AP 3+": "ap_exam",
-  "IB 4+": "ib_exam",
-  "Dual Credit ELA": "dual_credit_ela",
-  "Dual Credit 3 hr - ELA": "dual_credit_ela",
-  "Dual Credit Math": "dual_credit_math",
-  "Dual Credit 3 hr - Math": "dual_credit_math",
-  "Dual Credit 9 hr": "dual_credit_any",
-  "OnRamps": "onramps",
-  "Earn Industry Based Certification": "ibc",
-  "Associate Degree": "associate_degree",
-  "Level I/II Certificate": "level_i_ii_certificate",
-  "Enlist in the Military": "military_enlistment",
-};
+// Strips everything except lowercase letters and digits — used for fuzzy header matching
+function normalizeHeader(h: string): string {
+  return h.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
 
-const REGION13_IDENTITY = ["Last Name", "First Name", "TSDS #"];
-const REGION13_DETECTION_KEYS = ["TSI RDG", "Earn Industry Based Certification", "TSDS #"];
+type DemographicField =
+  | "grade"
+  | "campus"
+  | "graduation_year"
+  | "is_eb"
+  | "is_econ_disadvantaged"
+  | "is_special_ed"
+  | "is_504"
+  | "ed_form_collected"
+  | "cte_pathway"
+  | "cte_certification"
+  | "cte_exam_date";
+
+type MappedFieldValue =
+  | IndicatorType
+  | "last_name"
+  | "first_name"
+  | "tsds_id"
+  | DemographicField
+  | "skip"
+  | null;
+
+/**
+ * Fuzzy lookup table: normalised header fragment → DB field.
+ * Entries are checked in order; first match wins.
+ */
+const FUZZY_HEADER_MAP: [string, MappedFieldValue][] = [
+  // ── Identity ──────────────────────────────────────────────────────────────
+  ["tsdsid",                   "tsds_id"],
+  ["tsds",                     "tsds_id"],        // "TSDS ID", "TSDS #", "TSDS Number"
+  ["lastname",                 "last_name"],
+  ["firstname",                "first_name"],
+  // ── Demographics ──────────────────────────────────────────────────────────
+  ["gradelevel",               "grade"],
+  ["grade",                    "grade"],
+  ["graduationyear",           "graduation_year"],
+  ["gradyear",                 "graduation_year"],
+  ["classof",                  "graduation_year"],
+  ["campus",                   "campus"],
+  ["school",                   "campus"],
+  ["iseb",                     "is_eb"],
+  ["englishlearner",           "is_eb"],
+  ["isecondisadvantaged",      "is_econ_disadvantaged"],
+  ["econdisadvantaged",        "is_econ_disadvantaged"],
+  ["economicdisadvantaged",    "is_econ_disadvantaged"],
+  ["isspecialed",              "is_special_ed"],
+  ["specialed",                "is_special_ed"],
+  ["sped",                     "is_special_ed"],
+  ["is504",                    "is_504"],
+  ["504",                      "is_504"],
+  ["edformcollected",          "ed_form_collected"],
+  ["edform",                   "ed_form_collected"],
+  ["ctepathway",               "cte_pathway"],
+  ["ctecertification",         "cte_certification"],
+  ["ctecert",                  "cte_certification"],
+  ["cteexamdate",              "cte_exam_date"],
+  // ── CCMR Indicators ────────────────────────────────────────────────────────
+  ["tsirdg",                   "tsi_reading"],
+  ["tsireading",               "tsi_reading"],
+  ["tsimath",                  "tsi_math"],
+  ["satrdg",                   "sat_reading"],
+  ["satreading",               "sat_reading"],
+  ["satmath",                  "sat_math"],
+  ["actrdg",                   "act_reading"],
+  ["actreading",               "act_reading"],
+  ["actmath",                  "act_math"],
+  ["collegeprepela",           "college_prep_ela"],
+  ["collegeprepmath",          "college_prep_math"],
+  ["apexam",                   "ap_exam"],
+  ["ap3",                      "ap_exam"],          // "AP 3+", "AP Exam 3+"
+  ["ibexam",                   "ib_exam"],
+  ["ib4",                      "ib_exam"],          // "IB 4+", "IB Exam 4+"
+  ["dualcreditela",            "dual_credit_ela"],
+  ["dualcredit3hrela",         "dual_credit_ela"],
+  ["dualcreditmath",           "dual_credit_math"],
+  ["dualcredit3hrmath",        "dual_credit_math"],
+  ["dualcredit9hr",            "dual_credit_any"],  // "Dual Credit 9hr", "Dual Credit 9hr Any"
+  ["onramps",                  "onramps"],
+  ["ibcearned",                "ibc"],
+  ["ibc",                      "ibc"],
+  ["earnindustrybased",        "ibc"],
+  ["associatedegree",          "associate_degree"],
+  ["leveliiicertificate",      "level_i_ii_certificate"],
+  ["leveli",                   "level_i_ii_certificate"],
+  ["militaryenlistment",       "military_enlistment"],
+  ["enlistmilitary",           "military_enlistment"],
+  ["enlistinthemilitary",      "military_enlistment"],
+  ["iepcompletion",            "iep_completion"],
+  ["iep",                      "iep_completion"],
+  ["spedadvanceddegree",       "sped_advanced_degree"],
+  ["advanceddegree",           "sped_advanced_degree"],
+];
+
+/** Returns the DB field for a CSV header, or null if not recognised. */
+function autoDetectField(header: string): MappedFieldValue | null {
+  const n = normalizeHeader(header);
+  for (const [pattern, field] of FUZZY_HEADER_MAP) {
+    if (n === pattern || n.startsWith(pattern) || n.endsWith(pattern)) {
+      return field;
+    }
+  }
+  return null;
+}
+
+// Region 13 format is detected by the presence of any of these normalised keys
+const REGION13_DETECTION_NORMALIZED = [
+  normalizeHeader("TSI RDG"),
+  normalizeHeader("Earn Industry Based Certification"),
+  normalizeHeader("TSDS #"),
+];
 
 const INDICATOR_DISPLAY: Record<IndicatorType, string> = {
   tsi_reading: "TSI Reading Met",
@@ -83,7 +172,7 @@ const ALL_INDICATOR_TYPES = Object.keys(INDICATOR_DISPLAY) as IndicatorType[];
 
 interface DetectedColumn {
   header: string;
-  mappedField: IndicatorType | "last_name" | "first_name" | "tsds_id" | "skip" | null;
+  mappedField: MappedFieldValue;
   autoDetected: boolean;
   sampleValues: string[];
 }
@@ -175,8 +264,8 @@ function buildDetectedFile(
   rawRows: Record<string, string>[]
 ): DetectedFile {
   const headers = rawRows.length > 0 ? Object.keys(rawRows[0]) : [];
-  const isRegion13 = REGION13_DETECTION_KEYS.some((k) =>
-    headers.some((h) => h.trim() === k)
+  const isRegion13 = REGION13_DETECTION_NORMALIZED.some((pattern) =>
+    headers.some((h) => normalizeHeader(h) === pattern)
   );
 
   const columns: DetectedColumn[] = headers.map((header) => {
@@ -186,24 +275,13 @@ function buildDetectedFile(
       .map((r) => String(r[header] ?? "").trim())
       .filter(Boolean);
 
-    let mappedField: DetectedColumn["mappedField"] = null;
-    let autoDetected = false;
-
-    if (trimmed === "Last Name") {
-      mappedField = "last_name";
-      autoDetected = true;
-    } else if (trimmed === "First Name") {
-      mappedField = "first_name";
-      autoDetected = true;
-    } else if (trimmed === "TSDS #") {
-      mappedField = "tsds_id";
-      autoDetected = true;
-    } else if (REGION13_HEADERS[trimmed] !== undefined) {
-      mappedField = REGION13_HEADERS[trimmed] as IndicatorType;
-      autoDetected = true;
-    }
-
-    return { header: trimmed, mappedField, autoDetected, sampleValues };
+    const detected = autoDetectField(trimmed);
+    return {
+      header: trimmed,
+      mappedField: detected,
+      autoDetected: detected !== null,
+      sampleValues,
+    };
   });
 
   return {
@@ -217,12 +295,15 @@ function buildDetectedFile(
   };
 }
 
+const BOOLEAN_FIELDS = new Set<MappedFieldValue>([
+  "is_eb", "is_econ_disadvantaged", "is_special_ed", "is_504", "ed_form_collected",
+]);
+
 function buildParsedRows(
   detected: DetectedFile,
-  columnOverrides: Record<string, DetectedColumn["mappedField"]>
+  columnOverrides: Record<string, MappedFieldValue>
 ): ParsedStudentRow[] {
-  // Merge auto-detected mapping with user overrides
-  const effectiveMapping = new Map<string, DetectedColumn["mappedField"]>();
+  const effectiveMapping = new Map<string, MappedFieldValue>();
   for (const col of detected.columns) {
     effectiveMapping.set(col.header, columnOverrides[col.header] ?? col.mappedField);
   }
@@ -233,18 +314,39 @@ function buildParsedRows(
       let firstName = "";
       let lastName = "";
       const metIndicators: IndicatorType[] = [];
+      const demographics: ParsedStudentRow["demographics"] = {};
 
       for (const [header, field] of effectiveMapping) {
+        if (!field || field === "skip") continue;
         const val = String(row[header] ?? "").trim();
-        if (field === "tsds_id") tsdsId = val;
-        else if (field === "first_name") firstName = val;
-        else if (field === "last_name") lastName = val;
-        else if (field && field !== "skip" && isMet(val)) {
-          metIndicators.push(field as IndicatorType);
+
+        if (field === "tsds_id") { tsdsId = val; continue; }
+        if (field === "first_name") { firstName = val; continue; }
+        if (field === "last_name") { lastName = val; continue; }
+
+        // Demographic fields
+        if (field === "grade") { const n = parseInt(val); if (!isNaN(n)) demographics.grade = n; continue; }
+        if (field === "graduation_year") { const n = parseInt(val); if (!isNaN(n)) demographics.graduationYear = n; continue; }
+        if (field === "campus") { if (val) demographics.campus = val; continue; }
+        if (BOOLEAN_FIELDS.has(field)) {
+          (demographics as Record<string, unknown>)[
+            field === "is_eb" ? "isEb"
+            : field === "is_econ_disadvantaged" ? "isEconDisadvantaged"
+            : field === "is_special_ed" ? "isSpecialEd"
+            : field === "is_504" ? "is504"
+            : "edFormCollected"
+          ] = isMet(val);
+          continue;
         }
+        if (field === "cte_pathway") { if (val) demographics.ctePathway = val; continue; }
+        if (field === "cte_certification") { if (val) demographics.cteCertification = val; continue; }
+        if (field === "cte_exam_date") { if (val) demographics.cteExamDate = val; continue; }
+
+        // Indicator fields
+        if (isMet(val)) metIndicators.push(field as IndicatorType);
       }
 
-      return { tsdsId, firstName, lastName, metIndicators };
+      return { tsdsId, firstName, lastName, metIndicators, demographics };
     })
     .filter((r) => r.tsdsId);
 }
@@ -438,18 +540,32 @@ const UploadZone = ({ onFile, isProcessing }: UploadZoneProps) => {
 // COLUMN MAPPER
 // ============================================
 
-const FIELD_OPTIONS: { value: DetectedColumn["mappedField"]; label: string }[] = [
-  { value: "skip", label: "— Skip this column —" },
-  { value: "last_name", label: "Last Name" },
-  { value: "first_name", label: "First Name" },
-  { value: "tsds_id", label: "TSDS ID" },
+const FIELD_OPTIONS: { value: MappedFieldValue; label: string }[] = [
+  { value: "skip",                  label: "— Skip this column —" },
+  // Identity
+  { value: "last_name",             label: "Last Name" },
+  { value: "first_name",            label: "First Name" },
+  { value: "tsds_id",               label: "TSDS ID" },
+  // Demographics
+  { value: "grade",                 label: "Grade" },
+  { value: "campus",                label: "Campus" },
+  { value: "graduation_year",       label: "Graduation Year" },
+  { value: "is_eb",                 label: "Is EB" },
+  { value: "is_econ_disadvantaged", label: "Is Econ Disadvantaged" },
+  { value: "is_special_ed",         label: "Is Special Ed" },
+  { value: "is_504",                label: "Is 504" },
+  { value: "ed_form_collected",     label: "ED Form Collected" },
+  { value: "cte_pathway",           label: "CTE Pathway" },
+  { value: "cte_certification",     label: "CTE Certification" },
+  { value: "cte_exam_date",         label: "CTE Exam Date" },
+  // CCMR Indicators
   ...ALL_INDICATOR_TYPES.map((t) => ({ value: t as IndicatorType, label: INDICATOR_DISPLAY[t] })),
 ];
 
 interface ColumnMapperProps {
   detected: DetectedFile;
-  overrides: Record<string, DetectedColumn["mappedField"]>;
-  onOverride: (header: string, field: DetectedColumn["mappedField"]) => void;
+  overrides: Record<string, MappedFieldValue>;
+  onOverride: (header: string, field: MappedFieldValue) => void;
   onImport: () => void;
   isImporting: boolean;
 }
@@ -579,7 +695,7 @@ const ColumnMapper = ({
       {/* Import button */}
       <div className="px-6 py-4 bg-neutral-50 flex items-center justify-between">
         <p className="text-[12px] text-neutral-500">
-          {detected.rowCount} rows will be matched by TSDS ID. Students not found in the system will be skipped.
+          {detected.rowCount} students will be imported or updated.
         </p>
         <button
           onClick={onImport}
@@ -636,8 +752,7 @@ const ImportResultBanner = ({
               {hasErrors ? "Import completed with warnings" : "Import successful"}
             </p>
             <p className={cn("text-[13px] mt-1", hasErrors ? "text-warning-dark/80" : "text-teal-700")}>
-              {result.imported} students updated · {result.skipped} skipped (TSDS not found) ·{" "}
-              {result.errored} errors
+              {result.imported} students imported or updated · {result.errored} errors
             </p>
             {result.errors.length > 0 && (
               <ul className="mt-2 space-y-0.5">
@@ -814,7 +929,7 @@ export const DataUploadPage = ({
   const [uploads, setUploads] = React.useState<DataUploadRow[]>(initialUploads);
   const [detected, setDetected] = React.useState<DetectedFile | null>(null);
   const [columnOverrides, setColumnOverrides] = React.useState<
-    Record<string, DetectedColumn["mappedField"]>
+    Record<string, MappedFieldValue>
   >({});
   const [isParsing, setIsParsing] = React.useState(false);
   const [isImporting, setIsImporting] = React.useState(false);
