@@ -1,11 +1,11 @@
 "use server";
 
-import { createAdminClient } from "@/utils/supabase/admin";
+import { cookies } from "next/headers";
+import { createClient } from "@/utils/supabase/server";
+import { getAuthDistrictId } from "@/lib/db/users";
 import { createUpload, updateUploadStatus } from "@/lib/db/uploads";
 import { computeCCMRReadiness } from "@/lib/ccmr";
 import type { IndicatorType, UploadSourceType } from "@/types/database";
-
-const DISTRICT_ID = "a0000001-0000-0000-0000-000000000001";
 
 // ============================================
 // TYPES
@@ -36,12 +36,14 @@ export async function importRows(
   sourceType: UploadSourceType,
   columnMapping: Record<string, string>
 ): Promise<ImportResult> {
-  const supabase = createAdminClient();
+  const cookieStore = await cookies();
+  const supabase = createClient(cookieStore);
+  const districtId = await getAuthDistrictId(supabase);
   const errors: string[] = [];
 
   // Create the upload record first
   const upload = await createUpload(supabase, {
-    district_id: DISTRICT_ID,
+    district_id: districtId,
     file_name: fileName,
     source_type: sourceType,
     records_total: rows.length,
@@ -60,7 +62,7 @@ export async function importRows(
   const { data: students, error: studentErr } = await supabase
     .from("students")
     .select("id, tsds_id, grade_level, indicators_met_count")
-    .eq("district_id", DISTRICT_ID)
+    .eq("district_id", districtId)
     .eq("is_active", true)
     .in("tsds_id", tsdsIds);
 

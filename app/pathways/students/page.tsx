@@ -1,39 +1,41 @@
-import { createAdminClient } from "@/utils/supabase/admin";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import { createClient } from "@/utils/supabase/server";
 import { PathwaysAppShell } from "@/components/pathways/app-shell";
 import { PathwaysStudents } from "@/components/pathways/students";
 import { getStudents } from "@/lib/db/students";
 import { getIndicatorsForStudents } from "@/lib/db/indicators";
 import { getCampuses } from "@/lib/db/campuses";
+import { getUserContext } from "@/lib/db/users";
 
-const DISTRICT_ID = "a0000001-0000-0000-0000-000000000001";
+function formatRole(role: string): string {
+  return role.split("_").map((w) => w[0].toUpperCase() + w.slice(1)).join(" ");
+}
 
 export default async function PathwaysStudentsPage() {
-  const supabase = createAdminClient();
+  const cookieStore = await cookies();
+  const supabase = createClient(cookieStore);
+  const userCtx = await getUserContext(supabase);
+  if (!userCtx) redirect("/login");
 
-  const [{ data: students, count }, campuses, schoolYear] = await Promise.all([
-    getStudents(supabase, DISTRICT_ID, { pageSize: 50 }),
-    getCampuses(supabase, DISTRICT_ID),
-    supabase
-      .from("school_years")
-      .select("graduation_date")
-      .eq("district_id", DISTRICT_ID)
-      .eq("is_current", true)
-      .single(),
+  const { districtId, profile, districtName, schoolYearLabel, graduationDate } = userCtx;
+
+  const [{ data: students, count }, campuses] = await Promise.all([
+    getStudents(supabase, districtId, { pageSize: 50 }),
+    getCampuses(supabase, districtId),
   ]);
 
   const studentIds = students.map((s) => s.id);
   const indicators = await getIndicatorsForStudents(supabase, studentIds);
 
-  const graduationDate = schoolYear.data?.graduation_date ?? null;
-
   return (
     <PathwaysAppShell
       headerProps={{
-        userName: "Sarah Chen",
-        userRole: "CCMR Coordinator",
-        districtName: "Edinburg CISD",
-        schoolYear: "2025-26",
-        notificationCount: 3,
+        userName: profile.full_name,
+        userRole: formatRole(profile.role),
+        districtName,
+        schoolYear: schoolYearLabel,
+        notificationCount: 0,
       }}
       breadcrumbs={[
         { label: "Summit Pathways", href: "/pathways" },
@@ -42,7 +44,7 @@ export default async function PathwaysStudentsPage() {
       activeNavItem="students"
     >
       <PathwaysStudents
-        districtId={DISTRICT_ID}
+        districtId={districtId}
         initialStudents={students}
         initialCount={count}
         initialIndicators={indicators}

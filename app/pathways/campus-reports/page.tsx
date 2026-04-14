@@ -1,22 +1,32 @@
 import { Metadata } from "next";
-import { createAdminClient } from "@/utils/supabase/admin";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import { createClient } from "@/utils/supabase/server";
 import { PathwaysAppShell } from "@/components/pathways/app-shell";
 import { CampusReportsPage } from "@/components/pathways/campus-reports";
 import { getCampusSummaries, getCampuses } from "@/lib/db/campuses";
+import { getUserContext } from "@/lib/db/users";
 
 export const metadata: Metadata = {
   title: "Campus Reports | Summit Pathways",
   description: "CCMR breakdown by campus with action plans",
 };
 
-const DISTRICT_ID = "a0000001-0000-0000-0000-000000000001";
+function formatRole(role: string): string {
+  return role.split("_").map((w) => w[0].toUpperCase() + w.slice(1)).join(" ");
+}
 
 export default async function Page() {
-  const supabase = createAdminClient();
+  const cookieStore = await cookies();
+  const supabase = createClient(cookieStore);
+  const userCtx = await getUserContext(supabase);
+  if (!userCtx) redirect("/login");
+
+  const { districtId, profile, districtName, schoolYearLabel } = userCtx;
 
   const [summaries, campuses] = await Promise.all([
-    getCampusSummaries(supabase, DISTRICT_ID),
-    getCampuses(supabase, DISTRICT_ID),
+    getCampusSummaries(supabase, districtId),
+    getCampuses(supabase, districtId),
   ]);
 
   // The view groups by graduation_year — keep only the current (max) year so
@@ -28,11 +38,11 @@ export default async function Page() {
   return (
     <PathwaysAppShell
       headerProps={{
-        userName: "Sarah Chen",
-        userRole: "CCMR Coordinator",
-        districtName: "Edinburg CISD",
-        schoolYear: "2025-26",
-        notificationCount: 3,
+        userName: profile.full_name,
+        userRole: formatRole(profile.role),
+        districtName,
+        schoolYear: schoolYearLabel,
+        notificationCount: 0,
       }}
       breadcrumbs={[
         { label: "Summit Pathways", href: "/pathways" },

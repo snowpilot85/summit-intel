@@ -1,9 +1,11 @@
 "use server";
 
-import { createAdminClient } from "@/utils/supabase/admin";
+import { cookies } from "next/headers";
+import { createClient } from "@/utils/supabase/server";
 
 export async function markInterventionComplete(interventionId: string): Promise<void> {
-  const supabase = createAdminClient();
+  const cookieStore = await cookies();
+  const supabase = createClient(cookieStore);
   const { error } = await supabase
     .from("interventions")
     .update({

@@ -4,6 +4,8 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/utils/supabase/client";
 import {
   LayoutDashboard,
   Users,
@@ -40,15 +42,22 @@ interface PathwaysHeaderProps {
 }
 
 export const PathwaysHeader = ({
-  userName = "Sarah Chen",
-  userRole = "CCMR Coordinator",
-  districtName = "Edinburg CISD",
+  userName = "User",
+  userRole = "",
+  districtName = "",
   schoolYear = "2025-26",
-  notificationCount = 3,
+  notificationCount = 0,
 }: PathwaysHeaderProps) => {
+  const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = React.useState(false);
   const [productMenuOpen, setProductMenuOpen] = React.useState(false);
+
+  async function handleSignOut() {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push("/login");
+  }
 
   return (
     <header className="bg-primary-500 text-neutral-0 w-full">
@@ -202,12 +211,12 @@ export const PathwaysHeader = ({
                     Help & Support
                   </Link>
                   <hr className="my-1 border-neutral-200" />
-                  <Link
-                    href="#"
-                    className="block px-4 py-2 text-[14px] text-error hover:bg-neutral-50"
+                  <button
+                    onClick={handleSignOut}
+                    className="block w-full text-left px-4 py-2 text-[14px] text-error hover:bg-neutral-50"
                   >
                     Sign Out
-                  </Link>
+                  </button>
                 </div>
               )}
             </div>

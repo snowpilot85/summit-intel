@@ -1,12 +1,16 @@
-import { notFound } from "next/navigation";
-import { createAdminClient } from "@/utils/supabase/admin";
+import { notFound, redirect } from "next/navigation";
+import { cookies } from "next/headers";
+import { createClient } from "@/utils/supabase/server";
 import { PathwaysAppShell } from "@/components/pathways/app-shell";
 import { PathwaysStudentProfile } from "@/components/pathways/student-profile";
 import { getStudentById } from "@/lib/db/students";
 import { getStudentIndicators } from "@/lib/db/indicators";
 import { getInterventions } from "@/lib/db/interventions";
+import { getUserContext } from "@/lib/db/users";
 
-const DISTRICT_ID = "a0000001-0000-0000-0000-000000000001";
+function formatRole(role: string): string {
+  return role.split("_").map((w) => w[0].toUpperCase() + w.slice(1)).join(" ");
+}
 
 export default async function PathwaysStudentProfilePage({
   params,
@@ -14,23 +18,21 @@ export default async function PathwaysStudentProfilePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const supabase = createAdminClient();
+  const cookieStore = await cookies();
+  const supabase = createClient(cookieStore);
+  const userCtx = await getUserContext(supabase);
+  if (!userCtx) redirect("/login");
 
-  const [student, indicators, interventions, schoolYear] = await Promise.all([
+  const { districtId, profile, districtName, schoolYearLabel, graduationDate } = userCtx;
+
+  const [student, indicators, interventions] = await Promise.all([
     getStudentById(supabase, id),
     getStudentIndicators(supabase, id),
-    getInterventions(supabase, DISTRICT_ID, { studentId: id }),
-    supabase
-      .from("school_years")
-      .select("graduation_date")
-      .eq("district_id", DISTRICT_ID)
-      .eq("is_current", true)
-      .single(),
+    getInterventions(supabase, districtId, { studentId: id }),
   ]);
 
   if (!student) notFound();
 
-  // Fetch campus name using the student's campus_id
   const { data: campus } = await supabase
     .from("campuses")
     .select("name")
@@ -38,17 +40,16 @@ export default async function PathwaysStudentProfilePage({
     .single();
 
   const campusName = campus?.name ?? "Unknown campus";
-  const graduationDate = schoolYear.data?.graduation_date ?? null;
   const studentName = `${student.first_name} ${student.last_name}`;
 
   return (
     <PathwaysAppShell
       headerProps={{
-        userName: "Sarah Chen",
-        userRole: "CCMR Coordinator",
-        districtName: "Edinburg CISD",
-        schoolYear: "2025-26",
-        notificationCount: 3,
+        userName: profile.full_name,
+        userRole: formatRole(profile.role),
+        districtName,
+        schoolYear: schoolYearLabel,
+        notificationCount: 0,
       }}
       breadcrumbs={[
         { label: "Summit Pathways", href: "/pathways" },

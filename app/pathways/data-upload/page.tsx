@@ -1,7 +1,10 @@
 import { Metadata } from "next";
-import { createAdminClient } from "@/utils/supabase/admin";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import { createClient } from "@/utils/supabase/server";
 import { PathwaysAppShell } from "@/components/pathways/app-shell";
 import { DataUploadPage } from "@/components/pathways/data-upload";
+import { getUserContext } from "@/lib/db/users";
 import type { DataUploadRow } from "@/types/database";
 
 export const metadata: Metadata = {
@@ -9,26 +12,33 @@ export const metadata: Metadata = {
   description: "Upload CCMR tracker files and student data",
 };
 
-const DISTRICT_ID = "a0000001-0000-0000-0000-000000000001";
+function formatRole(role: string): string {
+  return role.split("_").map((w) => w[0].toUpperCase() + w.slice(1)).join(" ");
+}
 
 export default async function Page() {
-  const supabase = createAdminClient();
+  const cookieStore = await cookies();
+  const supabase = createClient(cookieStore);
+  const userCtx = await getUserContext(supabase);
+  if (!userCtx) redirect("/login");
+
+  const { districtId, profile, districtName, schoolYearLabel } = userCtx;
 
   const { data: uploads } = await supabase
     .from("data_uploads")
     .select("*")
-    .eq("district_id", DISTRICT_ID)
+    .eq("district_id", districtId)
     .order("created_at", { ascending: false })
     .limit(100);
 
   return (
     <PathwaysAppShell
       headerProps={{
-        userName: "Sarah Chen",
-        userRole: "CCMR Coordinator",
-        districtName: "Edinburg CISD",
-        schoolYear: "2025-26",
-        notificationCount: 3,
+        userName: profile.full_name,
+        userRole: formatRole(profile.role),
+        districtName,
+        schoolYear: schoolYearLabel,
+        notificationCount: 0,
       }}
       breadcrumbs={[
         { label: "Summit Pathways", href: "/pathways" },
@@ -37,7 +47,7 @@ export default async function Page() {
       activeNavItem="data-upload"
     >
       <DataUploadPage
-        districtId={DISTRICT_ID}
+        districtId={districtId}
         initialUploads={(uploads ?? []) as DataUploadRow[]}
       />
     </PathwaysAppShell>

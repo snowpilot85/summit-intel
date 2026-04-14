@@ -1,40 +1,48 @@
 import { Metadata } from "next";
-import { createAdminClient } from "@/utils/supabase/admin";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import { createClient } from "@/utils/supabase/server";
 import { PathwaysAppShell } from "@/components/pathways/app-shell";
 import { InterventionsPage } from "@/components/pathways/interventions";
 import { getInterventions } from "@/lib/db/interventions";
 import { getStudentsByIds } from "@/lib/db/students";
 import { getCampuses } from "@/lib/db/campuses";
+import { getUserContext } from "@/lib/db/users";
 
 export const metadata: Metadata = {
   title: "Interventions | Summit Pathways",
   description: "CCMR intervention pathways sorted by potential impact",
 };
 
-const DISTRICT_ID = "a0000001-0000-0000-0000-000000000001";
+function formatRole(role: string): string {
+  return role.split("_").map((w) => w[0].toUpperCase() + w.slice(1)).join(" ");
+}
 
 export default async function Page() {
-  const supabase = createAdminClient();
+  const cookieStore = await cookies();
+  const supabase = createClient(cookieStore);
+  const userCtx = await getUserContext(supabase);
+  if (!userCtx) redirect("/login");
+
+  const { districtId, profile, districtName, schoolYearLabel } = userCtx;
 
   const [interventions, campuses, seniorCountResult] = await Promise.all([
-    getInterventions(supabase, DISTRICT_ID),
-    getCampuses(supabase, DISTRICT_ID),
+    getInterventions(supabase, districtId),
+    getCampuses(supabase, districtId),
     supabase
       .from("students")
       .select("*", { count: "exact", head: true })
-      .eq("district_id", DISTRICT_ID)
+      .eq("district_id", districtId)
       .eq("is_active", true)
       .eq("grade_level", 12),
   ]);
 
-  // Filter to active statuses only
   const activeInterventions = interventions.filter((i) =>
     (["recommended", "planned", "in_progress"] as const).includes(
       i.status as "recommended" | "planned" | "in_progress"
     )
   );
 
-  // Batch-fetch student records for all unique student IDs
   const studentIds = [...new Set(activeInterventions.map((i) => i.student_id))];
   const students = await getStudentsByIds(supabase, studentIds);
 
@@ -43,11 +51,11 @@ export default async function Page() {
   return (
     <PathwaysAppShell
       headerProps={{
-        userName: "Sarah Chen",
-        userRole: "CCMR Coordinator",
-        districtName: "Edinburg CISD",
-        schoolYear: "2025-26",
-        notificationCount: 3,
+        userName: profile.full_name,
+        userRole: formatRole(profile.role),
+        districtName,
+        schoolYear: schoolYearLabel,
+        notificationCount: 0,
       }}
       breadcrumbs={[
         { label: "Summit Pathways", href: "/pathways" },

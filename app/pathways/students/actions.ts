@@ -1,11 +1,12 @@
 "use server";
 
-import { createAdminClient } from "@/utils/supabase/admin";
+import { cookies } from "next/headers";
+import { createClient } from "@/utils/supabase/server";
+import { getAuthDistrictId } from "@/lib/db/users";
 import { getStudents } from "@/lib/db/students";
 import { getIndicatorsForStudents } from "@/lib/db/indicators";
 import type { CCMRReadiness, IndicatorRow, StudentRow } from "@/types/database";
 
-const DISTRICT_ID = "a0000001-0000-0000-0000-000000000001";
 const PAGE_SIZE = 50;
 
 export interface StudentFilters {
@@ -29,9 +30,11 @@ export interface StudentPageData {
 export async function fetchStudentPage(
   filters: StudentFilters = {}
 ): Promise<StudentPageData> {
-  const supabase = createAdminClient();
+  const cookieStore = await cookies();
+  const supabase = createClient(cookieStore);
+  const districtId = await getAuthDistrictId(supabase);
 
-  const { data: students, count } = await getStudents(supabase, DISTRICT_ID, {
+  const { data: students, count } = await getStudents(supabase, districtId, {
     ...filters,
     pageSize: PAGE_SIZE,
   });
