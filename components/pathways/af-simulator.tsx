@@ -2,753 +2,733 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
-import Link from "next/link";
+import { ChevronDown, ChevronUp, Info } from "lucide-react";
 import {
-  ChevronDown,
-  TrendingUp,
-  TrendingDown,
-  ArrowRight,
-} from "lucide-react";
+  simulate,
+  letterGrade,
+  type SimulatorInput,
+  type SimulatorResult,
+} from "@/lib/tea-accountability";
+import type { CampusCCMRSummaryRow, CampusRow } from "@/types/database";
 
 /* ============================================
-   A-F Accountability Impact Simulator
-   Standalone page with TEA formula implementation
+   Summit Readiness — A-F Accountability Simulator
+   TEA 2025 Chapter 5 math, live slider updates
    ============================================ */
 
-// ============================================
-// TYPES
-// ============================================
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-interface Campus {
-  id: string;
-  name: string;
-  ccmrRaw: number;
-  staarRaw: number;
-  gradRate: number;
-  growthPartARaw: number;
-  closingGapsRaw: number;
-  edPercent: number;
+function pct(n: number, total: number): number {
+  return total === 0 ? 0 : (n / total) * 100;
 }
 
-interface CalculationResult {
-  staarScaled: number;
-  staarLetter: string;
-  ccmrScaled: number;
-  ccmrLetter: string;
-  gradScaled: number;
-  gradLetter: string;
-  domain1: number;
-  domain1Letter: string;
-  partAScaled: number;
-  partALetter: string;
-  partBScaled: number;
-  partBLetter: string;
-  domain2: number;
-  domain2Letter: string;
-  betterDomain: number;
-  betterDomainLabel: string;
-  domain3: number;
-  domain3Letter: string;
-  overall: number;
-  overallLetter: string;
+function fmt1(n: number): string {
+  return n.toFixed(1);
 }
 
-// ============================================
-// MOCK DATA
-// ============================================
-
-const campuses: Campus[] = [
-  { id: "edinburg-north", name: "Edinburg North H S", ccmrRaw: 72, staarRaw: 36, gradRate: 94.2, growthPartARaw: 78, closingGapsRaw: 62, edPercent: 67.9 },
-  { id: "economedes", name: "Economedes H S", ccmrRaw: 75, staarRaw: 42, gradRate: 95.1, growthPartARaw: 80, closingGapsRaw: 58, edPercent: 71.2 },
-  { id: "vela", name: "Vela H S", ccmrRaw: 69, staarRaw: 38, gradRate: 93.5, growthPartARaw: 76, closingGapsRaw: 55, edPercent: 64.3 },
-  { id: "edinburg", name: "Edinburg H S", ccmrRaw: 64, staarRaw: 34, gradRate: 92.8, growthPartARaw: 74, closingGapsRaw: 52, edPercent: 72.5 },
-];
-
-// ============================================
-// TEA SCALING FORMULAS (from accountability manual)
-// ============================================
-
-const CUT_POINTS = {
-  staar: { a: 60, b: 53, c: 41, d: 35 },
-  ccmr: { a: 88, b: 78, c: 64, d: 51 },
-  growthPartA: { a: 85, b: 74, c: 68, d: 62 },
-  closingGaps: { a: 74, b: 62, c: 48, d: 37 },
-};
-
-function scaleScore(raw: number, cutPoints: { a: number; b: number; c: number; d: number }): number {
-  const { a, b, c, d } = cutPoints;
-  
-  if (raw >= a) {
-    // A range: 90-100
-    return Math.round(90 + 10 * (raw - a) / (100 - a));
-  } else if (raw >= b) {
-    // B range: 80-89
-    return Math.round(80 + 9 * (raw - b) / (a - b));
-  } else if (raw >= c) {
-    // C range: 70-79
-    return Math.round(70 + 9 * (raw - c) / (b - c));
-  } else if (raw >= d) {
-    // D range: 60-69
-    return Math.round(60 + 9 * (raw - d) / (c - d));
-  } else {
-    // F range: below 60
-    return Math.max(0, Math.round(59 * raw / d));
+function gradeColor(g: string): string {
+  switch (g) {
+    case "A": return "bg-green-500 text-white";
+    case "B": return "bg-teal-500 text-white";
+    case "C": return "bg-amber-400 text-white";
+    case "D": return "bg-orange-500 text-white";
+    default:  return "bg-red-500 text-white";
   }
 }
 
-function scaleGradRate(rate: number): number {
-  if (rate >= 98) return 95;
-  if (rate >= 97) return 85;
-  if (rate >= 96) return 80;
-  if (rate >= 95) return 75;
-  if (rate >= 94) return 70;
-  if (rate >= 91) return 65;
-  if (rate >= 88) return 60;
-  if (rate >= 72) return 55;
-  if (rate >= 50) return 50;
-  return 40;
-}
-
-function letterGrade(scaled: number): string {
-  if (scaled >= 90) return "A";
-  if (scaled >= 80) return "B";
-  if (scaled >= 70) return "C";
-  if (scaled >= 60) return "D";
-  return "F";
-}
-
-function calculateRating(ccmrRate: number, edPercent: number, staarRaw: number, campus: Campus): CalculationResult {
-  // Step 1: Scale each component
-  const staarScaled = scaleScore(staarRaw, CUT_POINTS.staar);
-  const ccmrScaled = scaleScore(ccmrRate, CUT_POINTS.ccmr);
-  const gradScaled = scaleGradRate(campus.gradRate);
-  
-  // Step 2: Domain 1 = STAAR (40%) + CCMR (40%) + Grad Rate (20%)
-  const domain1 = Math.round(staarScaled * 0.4 + ccmrScaled * 0.4 + gradScaled * 0.2);
-  
-  // Step 3: Domain 2 Part A (using fixed campus value)
-  const partAScaled = scaleScore(campus.growthPartARaw, CUT_POINTS.growthPartA);
-  
-  // Step 4: Domain 2 Part B — affected by ED%
-  // Higher ED% = lower cut scores = higher scaled score
-  // Approximate: Part B CCMR scaled gets a bonus as ED% increases
-  const edBonus = Math.max(0, (edPercent - campus.edPercent) * 0.3);
-  const partBScaled = Math.min(89, Math.round(ccmrScaled + edBonus));
-  
-  // Step 5: Domain 2 = better of Part A or Part B
-  const domain2 = Math.max(partAScaled, partBScaled);
-  
-  // Step 6: If either domain < 60, cap the better at 89
-  let betterDomain = Math.max(domain1, domain2);
-  if ((domain1 < 60 || domain2 < 60) && betterDomain > 89) {
-    betterDomain = 89;
+function gradeRing(g: string): string {
+  switch (g) {
+    case "A": return "ring-green-200 bg-green-50 text-green-800";
+    case "B": return "ring-teal-200 bg-teal-50 text-teal-800";
+    case "C": return "ring-amber-200 bg-amber-50 text-amber-800";
+    case "D": return "ring-orange-200 bg-orange-50 text-orange-800";
+    default:  return "ring-red-200 bg-red-50 text-red-800";
   }
-  
-  // Step 7: Domain 3 (fixed for demo)
-  const domain3 = scaleScore(campus.closingGapsRaw, CUT_POINTS.closingGaps);
-  
-  // Step 8: Overall = better domain × 70% + domain 3 × 30%
-  const overall = Math.round(betterDomain * 0.7 + domain3 * 0.3);
-  
+}
+
+function Delta({ a, b, suffix = "" }: { a: number; b: number; suffix?: string }) {
+  const d = Math.round(b - a);
+  if (d === 0) return <span className="text-neutral-400">—</span>;
+  return (
+    <span className={d > 0 ? "text-green-600 font-medium" : "text-red-500 font-medium"}>
+      {d > 0 ? "+" : ""}
+      {d}
+      {suffix}
+    </span>
+  );
+}
+
+function DeltaPct({ a, b }: { a: number; b: number }) {
+  const d = b - a;
+  if (Math.abs(d) < 0.05) return <span className="text-neutral-400">—</span>;
+  return (
+    <span className={d > 0 ? "text-green-600 font-medium" : "text-red-500 font-medium"}>
+      {d > 0 ? "+" : ""}
+      {fmt1(d)}%
+    </span>
+  );
+}
+
+interface SummaryLike {
+  campus_id: string;
+  campus_name: string;
+  total_seniors: number;
+  ccmr_met: number;
+  at_risk: number;
+  almost: number;
+  econ_total: number;
+  missing_ed_forms: number;
+}
+
+function aggregateSummaries(rows: CampusCCMRSummaryRow[]): SummaryLike {
   return {
-    staarScaled,
-    staarLetter: letterGrade(staarScaled),
-    ccmrScaled,
-    ccmrLetter: letterGrade(ccmrScaled),
-    gradScaled,
-    gradLetter: letterGrade(gradScaled),
-    domain1,
-    domain1Letter: letterGrade(domain1),
-    partAScaled,
-    partALetter: letterGrade(partAScaled),
-    partBScaled,
-    partBLetter: letterGrade(partBScaled),
-    domain2,
-    domain2Letter: letterGrade(domain2),
-    betterDomain,
-    betterDomainLabel: domain2 >= domain1 ? "Domain 2" : "Domain 1",
-    domain3,
-    domain3Letter: letterGrade(domain3),
-    overall,
-    overallLetter: letterGrade(overall),
+    campus_id: "__district__",
+    campus_name: "District Overview",
+    total_seniors:    rows.reduce((s, r) => s + r.total_seniors, 0),
+    ccmr_met:         rows.reduce((s, r) => s + r.ccmr_met, 0),
+    at_risk:          rows.reduce((s, r) => s + r.at_risk, 0),
+    almost:           rows.reduce((s, r) => s + r.almost, 0),
+    econ_total:       rows.reduce((s, r) => s + r.econ_total, 0),
+    missing_ed_forms: rows.reduce((s, r) => s + r.missing_ed_forms, 0),
   };
 }
 
-// ============================================
-// LETTER GRADE BADGE COLORS
-// ============================================
+// ── Slider ────────────────────────────────────────────────────────────────────
 
-const getGradeColors = (letter: string) => {
-  switch (letter) {
-    case "A":
-      return { bg: "bg-[#E1F5EE]", text: "text-[#085041]", solid: "bg-teal-500" };
-    case "B":
-      return { bg: "bg-[#E6F1FB]", text: "text-[#0C447C]", solid: "bg-primary-500" };
-    case "C":
-      return { bg: "bg-[#FAEEDA]", text: "text-[#633806]", solid: "bg-warning" };
-    case "D":
-      return { bg: "bg-[#FCEBEB]", text: "text-[#791F1F]", solid: "bg-error" };
-    default:
-      return { bg: "bg-[#FCEBEB]", text: "text-[#791F1F]", solid: "bg-error" };
-  }
-};
-
-// ============================================
-// CAMPUS SELECTOR
-// ============================================
-
-interface CampusSelectorProps {
-  selectedCampus: Campus;
-  onCampusChange: (campus: Campus) => void;
+interface SliderProps {
+  label: string;
+  value: number;
+  max: number;
+  onChange: (v: number) => void;
+  disabled?: boolean;
+  accentClass?: string;
 }
 
-const CampusSelector = ({ selectedCampus, onCampusChange }: CampusSelectorProps) => {
-  const [isOpen, setIsOpen] = React.useState(false);
-
+function Slider({ label, value, max, onChange, disabled, accentClass = "accent-primary-500" }: SliderProps) {
   return (
-    <div className="relative">
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between gap-4 p-4 bg-neutral-0 border border-neutral-200 rounded-lg hover:bg-neutral-50 transition-colors"
-      >
-        <div className="text-left">
-          <p className="text-[11px] text-neutral-500 uppercase tracking-wider mb-1">Select a campus</p>
-          <p className="text-[16px] font-semibold text-neutral-900">{selectedCampus.name}</p>
-        </div>
-        <ChevronDown className={cn("w-5 h-5 text-neutral-500 transition-transform", isOpen && "rotate-180")} />
-      </button>
-
-      {isOpen && (
-        <div className="absolute top-full left-0 right-0 mt-2 bg-neutral-0 border border-neutral-200 rounded-lg shadow-lg z-50">
-          {campuses.map((campus) => (
-            <button
-              key={campus.id}
-              onClick={() => {
-                onCampusChange(campus);
-                setIsOpen(false);
-              }}
-              className={cn(
-                "w-full flex items-center justify-between p-4 hover:bg-neutral-50 transition-colors border-b border-neutral-100 last:border-0 first:rounded-t-lg last:rounded-b-lg text-left",
-                selectedCampus.id === campus.id && "bg-teal-50"
-              )}
-            >
-              <div>
-                <p className="text-[14px] font-medium text-neutral-900">{campus.name}</p>
-                <p className="text-[12px] text-neutral-500">
-                  CCMR: {campus.ccmrRaw}% | STAAR: {campus.staarRaw} | Grad: {campus.gradRate}%
-                </p>
-              </div>
-            </button>
-          ))}
-        </div>
-      )}
+    <div>
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="text-[13px] font-medium text-neutral-700">{label}</span>
+        <span className="text-[13px] font-semibold text-neutral-900 tabular-nums">
+          {value} / {max}
+        </span>
+      </div>
+      <input
+        type="range"
+        min={0}
+        max={max}
+        value={value}
+        disabled={disabled || max === 0}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className={cn("w-full h-2 rounded-full cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed", accentClass)}
+      />
     </div>
   );
-};
+}
 
-// ============================================
-// MAIN A-F SIMULATOR PAGE
-// ============================================
+// ── Number input ──────────────────────────────────────────────────────────────
 
-export const AFSimulatorPage = () => {
-  const [selectedCampus, setSelectedCampus] = React.useState<Campus>(campuses[0]);
-  const [ccmrRate, setCcmrRate] = React.useState(selectedCampus.ccmrRaw);
-  const [edPercent, setEdPercent] = React.useState(selectedCampus.edPercent);
-  const [staarRaw, setStaarRaw] = React.useState(selectedCampus.staarRaw);
+interface NumInputProps {
+  label: string;
+  value: number;
+  min?: number;
+  max?: number;
+  suffix?: string;
+  onChange: (v: number) => void;
+  hint?: string;
+}
+
+function NumInput({ label, value, min = 0, max = 100, suffix, onChange, hint }: NumInputProps) {
+  return (
+    <div>
+      <label className="block text-[12px] font-medium text-neutral-600 mb-1">
+        {label}
+        {hint && (
+          <span className="ml-1 text-neutral-400" title={hint}>
+            <Info className="inline w-3 h-3" />
+          </span>
+        )}
+      </label>
+      <div className="flex items-center gap-1.5">
+        <input
+          type="number"
+          min={min}
+          max={max}
+          value={value}
+          onChange={(e) => {
+            const v = Math.min(max, Math.max(min, Number(e.target.value) || 0));
+            onChange(v);
+          }}
+          className="w-20 px-2 py-1.5 text-[13px] border border-neutral-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-400"
+        />
+        {suffix && <span className="text-[12px] text-neutral-500">{suffix}</span>}
+      </div>
+    </div>
+  );
+}
+
+// ── Grade badge ───────────────────────────────────────────────────────────────
+
+interface GradeBadgeProps {
+  grade: string;
+  score: number;
+  size?: "sm" | "lg";
+  animated?: boolean;
+}
+
+function GradeBadge({ grade, score, size = "sm", animated = false }: GradeBadgeProps) {
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-2",
+        animated && "transition-all duration-300"
+      )}
+    >
+      <div
+        className={cn(
+          "rounded-xl font-bold tabular-nums flex items-center justify-center",
+          gradeColor(grade),
+          size === "lg" ? "w-16 h-16 text-4xl" : "w-9 h-9 text-lg"
+        )}
+      >
+        {grade}
+      </div>
+      <div>
+        <div className={cn("font-semibold tabular-nums text-neutral-900", size === "lg" ? "text-xl" : "text-[14px]")}>
+          {score}
+        </div>
+        <div className="text-[11px] text-neutral-500">pts</div>
+      </div>
+    </div>
+  );
+}
+
+// ── Comparison table ──────────────────────────────────────────────────────────
+
+interface CompareRowProps {
+  label: string;
+  current: React.ReactNode;
+  projected: React.ReactNode;
+  delta: React.ReactNode;
+  highlight?: boolean;
+  indent?: boolean;
+}
+
+function CompareRow({ label, current, projected, delta, highlight, indent }: CompareRowProps) {
+  return (
+    <tr className={cn(highlight && "bg-neutral-50 font-semibold")}>
+      <td className={cn("py-2 pr-3 text-[13px] text-neutral-600", indent && "pl-4")}>
+        {label}
+      </td>
+      <td className="py-2 pr-3 text-[13px] text-neutral-900 tabular-nums text-right">{current}</td>
+      <td className="py-2 pr-3 text-[13px] text-neutral-900 tabular-nums text-right">{projected}</td>
+      <td className="py-2 text-[13px] text-right tabular-nums">{delta}</td>
+    </tr>
+  );
+}
+
+function ScoreCell({ score, grade }: { score: number; grade: string }) {
+  return (
+    <span>
+      {score}{" "}
+      <span className={cn("text-[11px] font-semibold px-1 py-0.5 rounded", gradeRing(grade))}>
+        {grade}
+      </span>
+    </span>
+  );
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
+
+interface AFSimulatorPageProps {
+  summaries: CampusCCMRSummaryRow[];
+  campuses: CampusRow[];
+}
+
+export function AFSimulatorPage({ summaries, campuses }: AFSimulatorPageProps) {
+  // Filter to the most recent graduation year
+  const years = summaries.map((s) => s.graduation_year);
+  const maxYear = years.length > 0 ? Math.max(...years) : new Date().getFullYear();
+  const currentSummaries = summaries.filter((s) => s.graduation_year === maxYear);
+
+  const districtAggregate = React.useMemo(
+    () => aggregateSummaries(currentSummaries),
+    [currentSummaries]
+  );
+
+  // ── State ──
+  const defaultId = currentSummaries[0]?.campus_id ?? "__district__";
+  const [selectedId, setSelectedId] = React.useState<string>(defaultId);
+  const [ccmrAdd, setCcmrAdd]       = React.useState(0);
+  const [edAdd, setEdAdd]           = React.useState(0);
+  const [staarRaw, setStaarRaw]     = React.useState(50);
+  const [partA, setPartA]           = React.useState(65);
+  const [gradRate, setGradRate]     = React.useState(90);
+  const [ctgScaled, setCtgScaled]   = React.useState(70);
+  const [advOpen, setAdvOpen]       = React.useState(false);
+  const [gradeFlash, setGradeFlash] = React.useState(false);
+  const prevGradeRef = React.useRef<string | null>(null);
 
   // Reset sliders when campus changes
   React.useEffect(() => {
-    setCcmrRate(selectedCampus.ccmrRaw);
-    setEdPercent(selectedCampus.edPercent);
-    setStaarRaw(selectedCampus.staarRaw);
-  }, [selectedCampus]);
+    setCcmrAdd(0);
+    setEdAdd(0);
+  }, [selectedId]);
 
-  const baseResult = calculateRating(selectedCampus.ccmrRaw, selectedCampus.edPercent, selectedCampus.staarRaw, selectedCampus);
-  const projectedResult = calculateRating(ccmrRate, edPercent, staarRaw, selectedCampus);
-  
-  const overallChange = projectedResult.overall - baseResult.overall;
-  const crossedToA = baseResult.overallLetter !== "A" && projectedResult.overallLetter === "A";
-  const crossedToB = baseResult.overallLetter === "C" && projectedResult.overallLetter === "B";
-  const dropped = projectedResult.overall < baseResult.overall;
+  // ── Selected data ──
+  const selected: SummaryLike = React.useMemo(() => {
+    if (selectedId === "__district__") return districtAggregate;
+    const found = currentSummaries.find((s) => s.campus_id === selectedId);
+    return found ?? districtAggregate;
+  }, [selectedId, currentSummaries, districtAggregate]);
 
-  const baseColors = getGradeColors(baseResult.overallLetter);
-  const projectedColors = getGradeColors(projectedResult.overallLetter);
+  const documentedED  = selected.econ_total - selected.missing_ed_forms;
+  const sliderMaxCCMR = selected.at_risk + selected.almost;
+  const sliderMaxED   = selected.missing_ed_forms;
 
-  // Determine highest leverage move
-  const getHighestLeverageMove = () => {
-    // Calculate marginal impact of each lever
-    const ccmrImpact = calculateRating(ccmrRate + 10, edPercent, staarRaw, selectedCampus).overall - projectedResult.overall;
-    const edImpact = calculateRating(ccmrRate, Math.min(95, edPercent + 10), staarRaw, selectedCampus).overall - projectedResult.overall;
-    const staarImpact = calculateRating(ccmrRate, edPercent, Math.min(80, staarRaw + 10), selectedCampus).overall - projectedResult.overall;
-    
-    if (edImpact >= ccmrImpact && edImpact >= staarImpact) {
-      return "Collect ED forms (free) + improve CCMR by 10 points — could significantly boost your rating";
-    } else if (ccmrImpact >= staarImpact) {
-      return "Focus on IBC exam completion for CTE students — highest CCMR impact per effort";
-    } else {
-      return "Target STAAR intervention for students near proficiency threshold";
-    }
+  const sharedInput: Omit<SimulatorInput, "ccmrAdditions" | "edAdditions"> = {
+    ccmrMet:              selected.ccmr_met,
+    totalSeniors:         selected.total_seniors,
+    documentedED,
+    missingEdForms:       selected.missing_ed_forms,
+    staarRaw,
+    academicGrowthPartA:  partA,
+    gradRatePct:          gradRate,
+    closingGapsScaled:    ctgScaled,
   };
 
+  const current   = simulate({ ...sharedInput, ccmrAdditions: 0,       edAdditions: 0 });
+  const projected = simulate({ ...sharedInput, ccmrAdditions: ccmrAdd, edAdditions: edAdd });
+
+  // Grade change animation
+  React.useEffect(() => {
+    if (prevGradeRef.current !== null && prevGradeRef.current !== projected.grade) {
+      setGradeFlash(true);
+      const t = setTimeout(() => setGradeFlash(false), 1200);
+      return () => clearTimeout(t);
+    }
+    prevGradeRef.current = projected.grade;
+  }, [projected.grade]);
+
+  // ── Action plan text ──
+  const actions: string[] = [];
+  if (ccmrAdd > 0) {
+    const pathways = ["CTE certification or dual enrollment", "TSI or SAT/ACT attainment", "AP/IB exam passage"];
+    actions.push(
+      `Move ${ccmrAdd} at-risk senior${ccmrAdd === 1 ? "" : "s"} to CCMR-met via ${pathways[0]}, ${pathways[1]}, or ${pathways[2]}.`
+    );
+  }
+  if (edAdd > 0) {
+    actions.push(
+      `Collect ${edAdd} outstanding ED documentation form${edAdd === 1 ? "" : "s"} from economically disadvantaged students.`
+    );
+  }
+  const gradeChanged = current.grade !== projected.grade;
+
+  // ── No data state ──
+  if (currentSummaries.length === 0) {
+    return (
+      <div className="bg-white border border-neutral-200 rounded-xl p-10 text-center">
+        <p className="text-[15px] font-medium text-neutral-700">No campus summary data available.</p>
+        <p className="text-[13px] text-neutral-500 mt-1">Upload student data to enable the simulator.</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-6">
-      {/* Campus Selector */}
-      <CampusSelector 
-        selectedCampus={selectedCampus} 
-        onCampusChange={setSelectedCampus} 
-      />
-
-      {/* Main Simulator Card */}
-      <div className="bg-neutral-0 border border-neutral-200 rounded-lg overflow-hidden">
-        <div className="p-6 border-b border-neutral-200 bg-gradient-to-r from-teal-50 to-primary-50">
-          <h2 className="text-[20px] font-bold text-neutral-900">A-F Accountability Impact Simulator</h2>
-          <p className="text-[14px] text-neutral-600 mt-1">
-            See how changes in CCMR flow through TEA&apos;s accountability formula to impact your A-F rating
+    <div className="space-y-5">
+      {/* ── Page header ── */}
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-[22px] font-semibold text-neutral-900">A-F Accountability Simulator</h1>
+          <p className="text-[13px] text-neutral-500 mt-0.5">
+            Adjust sliders to project your campus rating using TEA&rsquo;s 2025 accountability formula.
           </p>
         </div>
 
-        {/* Current Scores Table */}
-        <div className="p-6 border-b border-neutral-200">
-          <p className="text-[12px] font-semibold text-neutral-500 uppercase tracking-wider mb-4">
-            {selectedCampus.name} — Current vs. Projected Accountability Scores
-          </p>
-          <div className="overflow-x-auto">
-            <table className="w-full text-[13px]">
-              <thead>
-                <tr className="border-b border-neutral-200">
-                  <th className="text-left py-2 font-semibold text-neutral-700">Component</th>
-                  <th className="text-right py-2 font-semibold text-neutral-700">Raw</th>
-                  <th className="text-right py-2 font-semibold text-neutral-700">Current</th>
-                  <th className="text-right py-2 font-semibold text-neutral-700">Projected</th>
-                  <th className="text-right py-2 font-semibold text-neutral-700">Change</th>
-                </tr>
-              </thead>
-              <tbody>
-                {/* STAAR */}
-                <tr className="border-b border-neutral-100">
-                  <td className="py-2 text-neutral-700">Domain 1: STAAR</td>
-                  <td className="py-2 text-right text-neutral-600">{staarRaw}</td>
-                  <td className="py-2 text-right">
-                    <span className={cn("px-2 py-0.5 text-[11px] font-semibold rounded", getGradeColors(baseResult.staarLetter).bg, getGradeColors(baseResult.staarLetter).text)}>
-                      {baseResult.staarScaled} ({baseResult.staarLetter})
-                    </span>
-                  </td>
-                  <td className="py-2 text-right">
-                    <span className={cn("px-2 py-0.5 text-[11px] font-semibold rounded", getGradeColors(projectedResult.staarLetter).bg, getGradeColors(projectedResult.staarLetter).text)}>
-                      {projectedResult.staarScaled} ({projectedResult.staarLetter})
-                    </span>
-                  </td>
-                  <td className="py-2 text-right">
-                    <span className={cn("text-[12px] font-semibold", projectedResult.staarScaled > baseResult.staarScaled ? "text-teal-600" : projectedResult.staarScaled < baseResult.staarScaled ? "text-error" : "text-neutral-400")}>
-                      {projectedResult.staarScaled !== baseResult.staarScaled ? (projectedResult.staarScaled > baseResult.staarScaled ? "+" : "") + (projectedResult.staarScaled - baseResult.staarScaled) : "—"}
-                    </span>
-                  </td>
-                </tr>
-                {/* CCMR */}
-                <tr className="border-b border-neutral-100">
-                  <td className="py-2 text-neutral-700">Domain 1: CCMR</td>
-                  <td className="py-2 text-right text-neutral-600">{ccmrRate}%</td>
-                  <td className="py-2 text-right">
-                    <span className={cn("px-2 py-0.5 text-[11px] font-semibold rounded", getGradeColors(baseResult.ccmrLetter).bg, getGradeColors(baseResult.ccmrLetter).text)}>
-                      {baseResult.ccmrScaled} ({baseResult.ccmrLetter})
-                    </span>
-                  </td>
-                  <td className="py-2 text-right">
-                    <span className={cn("px-2 py-0.5 text-[11px] font-semibold rounded", getGradeColors(projectedResult.ccmrLetter).bg, getGradeColors(projectedResult.ccmrLetter).text)}>
-                      {projectedResult.ccmrScaled} ({projectedResult.ccmrLetter})
-                    </span>
-                  </td>
-                  <td className="py-2 text-right">
-                    <span className={cn("text-[12px] font-semibold", projectedResult.ccmrScaled > baseResult.ccmrScaled ? "text-teal-600" : projectedResult.ccmrScaled < baseResult.ccmrScaled ? "text-error" : "text-neutral-400")}>
-                      {projectedResult.ccmrScaled !== baseResult.ccmrScaled ? (projectedResult.ccmrScaled > baseResult.ccmrScaled ? "+" : "") + (projectedResult.ccmrScaled - baseResult.ccmrScaled) : "—"}
-                    </span>
-                  </td>
-                </tr>
-                {/* Graduation Rate */}
-                <tr className="border-b border-neutral-100">
-                  <td className="py-2 text-neutral-700">Domain 1: Graduation Rate</td>
-                  <td className="py-2 text-right text-neutral-600">{selectedCampus.gradRate}%</td>
-                  <td className="py-2 text-right">
-                    <span className={cn("px-2 py-0.5 text-[11px] font-semibold rounded", getGradeColors(baseResult.gradLetter).bg, getGradeColors(baseResult.gradLetter).text)}>
-                      {baseResult.gradScaled} ({baseResult.gradLetter})
-                    </span>
-                  </td>
-                  <td className="py-2 text-right">
-                    <span className={cn("px-2 py-0.5 text-[11px] font-semibold rounded", getGradeColors(projectedResult.gradLetter).bg, getGradeColors(projectedResult.gradLetter).text)}>
-                      {projectedResult.gradScaled} ({projectedResult.gradLetter})
-                    </span>
-                  </td>
-                  <td className="py-2 text-right text-neutral-400">—</td>
-                </tr>
-                {/* Domain 1 Total */}
-                <tr className="border-b border-neutral-100 bg-neutral-50">
-                  <td className="py-2 text-neutral-900 font-medium">Domain 1 weighted total</td>
-                  <td className="py-2 text-right text-neutral-600">—</td>
-                  <td className="py-2 text-right">
-                    <span className={cn("px-2 py-0.5 text-[11px] font-semibold rounded", getGradeColors(baseResult.domain1Letter).bg, getGradeColors(baseResult.domain1Letter).text)}>
-                      {baseResult.domain1} ({baseResult.domain1Letter})
-                    </span>
-                  </td>
-                  <td className="py-2 text-right">
-                    <span className={cn("px-2 py-0.5 text-[11px] font-semibold rounded", getGradeColors(projectedResult.domain1Letter).bg, getGradeColors(projectedResult.domain1Letter).text)}>
-                      {projectedResult.domain1} ({projectedResult.domain1Letter})
-                    </span>
-                  </td>
-                  <td className="py-2 text-right">
-                    <span className={cn("text-[12px] font-semibold", projectedResult.domain1 > baseResult.domain1 ? "text-teal-600" : projectedResult.domain1 < baseResult.domain1 ? "text-error" : "text-neutral-400")}>
-                      {projectedResult.domain1 !== baseResult.domain1 ? (projectedResult.domain1 > baseResult.domain1 ? "+" : "") + (projectedResult.domain1 - baseResult.domain1) : "—"}
-                    </span>
-                  </td>
-                </tr>
-                {/* Domain 2 Part A */}
-                <tr className="border-b border-neutral-100">
-                  <td className="py-2 text-neutral-700">Domain 2 Part A: Academic Growth</td>
-                  <td className="py-2 text-right text-neutral-600">{selectedCampus.growthPartARaw}</td>
-                  <td className="py-2 text-right">
-                    <span className={cn("px-2 py-0.5 text-[11px] font-semibold rounded", getGradeColors(baseResult.partALetter).bg, getGradeColors(baseResult.partALetter).text)}>
-                      {baseResult.partAScaled} ({baseResult.partALetter})
-                    </span>
-                  </td>
-                  <td className="py-2 text-right">
-                    <span className={cn("px-2 py-0.5 text-[11px] font-semibold rounded", getGradeColors(projectedResult.partALetter).bg, getGradeColors(projectedResult.partALetter).text)}>
-                      {projectedResult.partAScaled} ({projectedResult.partALetter})
-                    </span>
-                  </td>
-                  <td className="py-2 text-right text-neutral-400">—</td>
-                </tr>
-                {/* Domain 2 Part B */}
-                <tr className="border-b border-neutral-100">
-                  <td className="py-2 text-neutral-700">Domain 2 Part B: Relative Performance</td>
-                  <td className="py-2 text-right text-neutral-600">—</td>
-                  <td className="py-2 text-right">
-                    <span className={cn("px-2 py-0.5 text-[11px] font-semibold rounded", getGradeColors(baseResult.partBLetter).bg, getGradeColors(baseResult.partBLetter).text)}>
-                      {baseResult.partBScaled} ({baseResult.partBLetter})
-                    </span>
-                  </td>
-                  <td className="py-2 text-right">
-                    <span className={cn("px-2 py-0.5 text-[11px] font-semibold rounded", getGradeColors(projectedResult.partBLetter).bg, getGradeColors(projectedResult.partBLetter).text)}>
-                      {projectedResult.partBScaled} ({projectedResult.partBLetter})
-                    </span>
-                  </td>
-                  <td className="py-2 text-right">
-                    <span className={cn("text-[12px] font-semibold", projectedResult.partBScaled > baseResult.partBScaled ? "text-teal-600" : projectedResult.partBScaled < baseResult.partBScaled ? "text-error" : "text-neutral-400")}>
-                      {projectedResult.partBScaled !== baseResult.partBScaled ? (projectedResult.partBScaled > baseResult.partBScaled ? "+" : "") + (projectedResult.partBScaled - baseResult.partBScaled) : "—"}
-                    </span>
-                  </td>
-                </tr>
-                {/* Domain 2 Total */}
-                <tr className="border-b border-neutral-100 bg-neutral-50">
-                  <td className="py-2 text-neutral-900 font-medium">Domain 2 (better of A/B)</td>
-                  <td className="py-2 text-right text-neutral-600">—</td>
-                  <td className="py-2 text-right">
-                    <span className={cn("px-2 py-0.5 text-[11px] font-semibold rounded", getGradeColors(baseResult.domain2Letter).bg, getGradeColors(baseResult.domain2Letter).text)}>
-                      {baseResult.domain2} ({baseResult.domain2Letter})
-                    </span>
-                  </td>
-                  <td className="py-2 text-right">
-                    <span className={cn("px-2 py-0.5 text-[11px] font-semibold rounded", getGradeColors(projectedResult.domain2Letter).bg, getGradeColors(projectedResult.domain2Letter).text)}>
-                      {projectedResult.domain2} ({projectedResult.domain2Letter})
-                    </span>
-                  </td>
-                  <td className="py-2 text-right">
-                    <span className={cn("text-[12px] font-semibold", projectedResult.domain2 > baseResult.domain2 ? "text-teal-600" : projectedResult.domain2 < baseResult.domain2 ? "text-error" : "text-neutral-400")}>
-                      {projectedResult.domain2 !== baseResult.domain2 ? (projectedResult.domain2 > baseResult.domain2 ? "+" : "") + (projectedResult.domain2 - baseResult.domain2) : "—"}
-                    </span>
-                  </td>
-                </tr>
-                {/* Better Domain */}
-                <tr className="border-b border-neutral-100 bg-neutral-50">
-                  <td className="py-2 text-neutral-900 font-medium">Better of Domain 1 or 2</td>
-                  <td className="py-2 text-right text-neutral-600">—</td>
-                  <td className="py-2 text-right text-neutral-900 font-semibold">{baseResult.betterDomain} ({baseResult.betterDomainLabel})</td>
-                  <td className="py-2 text-right text-neutral-900 font-semibold">{projectedResult.betterDomain} ({projectedResult.betterDomainLabel})</td>
-                  <td className="py-2 text-right">
-                    <span className={cn("text-[12px] font-semibold", projectedResult.betterDomain > baseResult.betterDomain ? "text-teal-600" : projectedResult.betterDomain < baseResult.betterDomain ? "text-error" : "text-neutral-400")}>
-                      {projectedResult.betterDomain !== baseResult.betterDomain ? (projectedResult.betterDomain > baseResult.betterDomain ? "+" : "") + (projectedResult.betterDomain - baseResult.betterDomain) : "—"}
-                    </span>
-                  </td>
-                </tr>
-                {/* Domain 3 */}
-                <tr className="border-b border-neutral-100">
-                  <td className="py-2 text-neutral-700">Domain 3: Closing the Gaps</td>
-                  <td className="py-2 text-right text-neutral-600">{selectedCampus.closingGapsRaw}</td>
-                  <td className="py-2 text-right">
-                    <span className={cn("px-2 py-0.5 text-[11px] font-semibold rounded", getGradeColors(baseResult.domain3Letter).bg, getGradeColors(baseResult.domain3Letter).text)}>
-                      {baseResult.domain3} ({baseResult.domain3Letter})
-                    </span>
-                  </td>
-                  <td className="py-2 text-right">
-                    <span className={cn("px-2 py-0.5 text-[11px] font-semibold rounded", getGradeColors(projectedResult.domain3Letter).bg, getGradeColors(projectedResult.domain3Letter).text)}>
-                      {projectedResult.domain3} ({projectedResult.domain3Letter})
-                    </span>
-                  </td>
-                  <td className="py-2 text-right text-neutral-400">—</td>
-                </tr>
-                {/* Overall */}
-                <tr className="bg-teal-50">
-                  <td className="py-3 text-neutral-900 font-bold">Overall</td>
-                  <td className="py-3 text-right text-neutral-600">—</td>
-                  <td className="py-3 text-right">
-                    <span className={cn("px-2.5 py-1 text-[12px] font-bold rounded text-neutral-0", baseColors.solid)}>
-                      {baseResult.overall} ({baseResult.overallLetter})
-                    </span>
-                  </td>
-                  <td className="py-3 text-right">
-                    <span className={cn("px-2.5 py-1 text-[12px] font-bold rounded text-neutral-0", projectedColors.solid)}>
-                      {projectedResult.overall} ({projectedResult.overallLetter})
-                    </span>
-                  </td>
-                  <td className="py-3 text-right">
-                    <span className={cn("text-[14px] font-bold", overallChange > 0 ? "text-teal-600" : overallChange < 0 ? "text-error" : "text-neutral-400")}>
-                      {overallChange !== 0 ? (overallChange > 0 ? "+" : "") + overallChange : "—"}
-                    </span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <p className="text-[11px] text-neutral-500 mt-3">
-            Formula: Overall = (Better of Domain 1 or 2) × 70% + Domain 3 × 30%
-          </p>
-        </div>
-
-        {/* Simulator Controls */}
-        <div className="p-6 space-y-8 border-b border-neutral-200">
-          <p className="text-[14px] font-semibold text-neutral-900">Drag the sliders to see &quot;what if&quot; scenarios:</p>
-          
-          {/* CCMR Slider */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <label className="text-[14px] font-medium text-neutral-900">What if your CCMR rate changes?</label>
-              <span className="text-[14px]">
-                {ccmrRate !== selectedCampus.ccmrRaw && (
-                  <span className="text-neutral-500">{selectedCampus.ccmrRaw}% → </span>
-                )}
-                <span className="font-bold text-teal-600">{ccmrRate}%</span>
-              </span>
-            </div>
-            <input
-              type="range"
-              min="50"
-              max="100"
-              value={ccmrRate}
-              onChange={(e) => setCcmrRate(Number(e.target.value))}
-              className="w-full h-2 bg-neutral-200 rounded-lg appearance-none cursor-pointer accent-teal-500"
-            />
-            <div className="flex justify-between text-[11px] text-neutral-500">
-              <span>50%</span>
-              <span>75%</span>
-              <span>100%</span>
-            </div>
-          </div>
-          
-          {/* ED Rate Slider */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <label className="text-[14px] font-medium text-neutral-900">What if your ED form collection improves?</label>
-                <p className="text-[12px] text-neutral-500 mt-0.5">Higher documented ED rate = lower CCMR cut scores for your campus</p>
-              </div>
-              <span className="text-[14px]">
-                {edPercent !== selectedCampus.edPercent && (
-                  <span className="text-neutral-500">{selectedCampus.edPercent}% → </span>
-                )}
-                <span className="font-bold text-teal-600">{edPercent.toFixed(1)}%</span>
-              </span>
-            </div>
-            <input
-              type="range"
-              min="60"
-              max="95"
-              step="0.1"
-              value={edPercent}
-              onChange={(e) => setEdPercent(Number(e.target.value))}
-              className="w-full h-2 bg-neutral-200 rounded-lg appearance-none cursor-pointer accent-teal-500"
-            />
-            <div className="flex justify-between text-[11px] text-neutral-500">
-              <span>60%</span>
-              <span>77.5%</span>
-              <span>95%</span>
-            </div>
-          </div>
-          
-          {/* STAAR Slider */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <label className="text-[14px] font-medium text-neutral-900">What if STAAR performance improves?</label>
-              <span className="text-[14px]">
-                {staarRaw !== selectedCampus.staarRaw && (
-                  <span className="text-neutral-500">{selectedCampus.staarRaw} → </span>
-                )}
-                <span className="font-bold text-teal-600">{staarRaw}</span>
-              </span>
-            </div>
-            <input
-              type="range"
-              min="20"
-              max="80"
-              value={staarRaw}
-              onChange={(e) => setStaarRaw(Number(e.target.value))}
-              className="w-full h-2 bg-neutral-200 rounded-lg appearance-none cursor-pointer accent-teal-500"
-            />
-            <div className="flex justify-between text-[11px] text-neutral-500">
-              <span>20</span>
-              <span>50</span>
-              <span>80</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Results Section */}
-        <div className="p-6">
-          {/* Grade change alerts */}
-          {crossedToA && (
-            <div className="mb-6 p-4 bg-[#E1F5EE] border border-teal-300 rounded-lg">
-              <p className="text-[15px] font-bold text-[#085041]">
-                This scenario reaches an A rating!
-              </p>
-              <p className="text-[14px] text-[#085041]/80 mt-1">
-                Your overall score moved from {baseResult.overall} ({baseResult.overallLetter}) to {projectedResult.overall} ({projectedResult.overallLetter}).
-              </p>
-            </div>
-          )}
-          {crossedToB && (
-            <div className="mb-6 p-4 bg-[#E6F1FB] border border-primary-300 rounded-lg">
-              <p className="text-[15px] font-bold text-[#0C447C]">
-                Moving into B territory!
-              </p>
-              <p className="text-[14px] text-[#0C447C]/80 mt-1">
-                Your overall score moved from {baseResult.overall} ({baseResult.overallLetter}) to {projectedResult.overall} ({projectedResult.overallLetter}).
-              </p>
-            </div>
-          )}
-          {dropped && !crossedToA && !crossedToB && (
-            <div className="mb-6 p-4 bg-[#FAEEDA] border border-warning/50 rounded-lg">
-              <p className="text-[15px] font-bold text-[#633806]">
-                Rating would decrease
-              </p>
-              <p className="text-[14px] text-[#633806]/80 mt-1">
-                Your overall score would drop from {baseResult.overall} to {projectedResult.overall}.
-              </p>
-            </div>
-          )}
-
-          {/* Projected Impact Card */}
-          <div className={cn(
-            "p-5 rounded-lg border-2 transition-colors duration-300",
-            projectedColors.bg,
-            projectedResult.overallLetter === "A" ? "border-teal-400" : 
-            projectedResult.overallLetter === "B" ? "border-primary-300" : 
-            projectedResult.overallLetter === "C" ? "border-warning/50" : "border-error/50"
-          )}>
-            <div className="flex items-center justify-between mb-4">
-              <p className="text-[14px] font-semibold text-neutral-700">Projected Impact</p>
-              <span className={cn(
-                "px-4 py-2 text-[20px] font-bold rounded-lg transition-colors duration-300 text-neutral-0",
-                projectedColors.solid
-              )}>
-                {projectedResult.overallLetter}
-              </span>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-              <div className="p-3 bg-neutral-0/60 rounded-lg">
-                <p className="text-[11px] text-neutral-600 mb-1">Domain 1</p>
-                <p className="text-[18px] font-bold text-neutral-900">
-                  {baseResult.domain1} → {projectedResult.domain1}
-                  <span className={cn(
-                    "text-[13px] font-semibold ml-2",
-                    projectedResult.domain1 > baseResult.domain1 ? "text-teal-600" : 
-                    projectedResult.domain1 < baseResult.domain1 ? "text-error" : "text-neutral-500"
-                  )}>
-                    ({projectedResult.domain1 > baseResult.domain1 ? "+" : ""}{projectedResult.domain1 - baseResult.domain1})
-                  </span>
-                </p>
-              </div>
-              <div className="p-3 bg-neutral-0/60 rounded-lg">
-                <p className="text-[11px] text-neutral-600 mb-1">Domain 2</p>
-                <p className="text-[18px] font-bold text-neutral-900">
-                  {baseResult.domain2} → {projectedResult.domain2}
-                  <span className={cn(
-                    "text-[13px] font-semibold ml-2",
-                    projectedResult.domain2 > baseResult.domain2 ? "text-teal-600" : 
-                    projectedResult.domain2 < baseResult.domain2 ? "text-error" : "text-neutral-500"
-                  )}>
-                    ({projectedResult.domain2 > baseResult.domain2 ? "+" : ""}{projectedResult.domain2 - baseResult.domain2})
-                  </span>
-                </p>
-              </div>
-              <div className="p-3 bg-neutral-0/60 rounded-lg">
-                <p className="text-[11px] text-neutral-600 mb-1">Overall</p>
-                <p className="text-[18px] font-bold text-neutral-900">
-                  {baseResult.overall} → {projectedResult.overall}
-                  <span className={cn(
-                    "text-[13px] font-semibold ml-2",
-                    overallChange > 0 ? "text-teal-600" : overallChange < 0 ? "text-error" : "text-neutral-500"
-                  )}>
-                    ({overallChange > 0 ? "+" : ""}{overallChange} pts)
-                  </span>
-                </p>
-              </div>
-            </div>
-            
-            {(ccmrRate !== selectedCampus.ccmrRaw || edPercent !== selectedCampus.edPercent || staarRaw !== selectedCampus.staarRaw) && (
-              <div className="p-3 bg-neutral-0/80 rounded-lg">
-                <p className="text-[13px] font-semibold text-neutral-900 mb-2">Scenario Summary:</p>
-                <ul className="text-[13px] text-neutral-700 space-y-1">
-                  {ccmrRate !== selectedCampus.ccmrRaw && (
-                    <li>CCMR: {selectedCampus.ccmrRaw}% → {ccmrRate}%</li>
-                  )}
-                  {edPercent !== selectedCampus.edPercent && (
-                    <li>ED documentation: {selectedCampus.edPercent}% → {edPercent.toFixed(1)}%</li>
-                  )}
-                  {staarRaw !== selectedCampus.staarRaw && (
-                    <li>STAAR raw score: {selectedCampus.staarRaw} → {staarRaw}</li>
-                  )}
-                </ul>
-              </div>
-            )}
-          </div>
-          
-          {/* Highest leverage move */}
-          <div className="mt-6 p-4 bg-neutral-50 border border-neutral-200 rounded-lg">
-            <p className="text-[13px] font-semibold text-neutral-900 mb-1">Your highest-leverage move:</p>
-            <p className="text-[13px] text-neutral-700">
-              {getHighestLeverageMove()}
-            </p>
-          </div>
-          
-          {/* Reset button */}
-          <div className="mt-4 flex justify-end">
-            <button
-              onClick={() => {
-                setCcmrRate(selectedCampus.ccmrRaw);
-                setEdPercent(selectedCampus.edPercent);
-                setStaarRaw(selectedCampus.staarRaw);
-              }}
-              className="px-4 py-2 text-[13px] font-medium text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 rounded-md transition-colors"
-            >
-              Reset to current values
-            </button>
-          </div>
+        {/* Campus selector */}
+        <div className="relative">
+          <select
+            value={selectedId}
+            onChange={(e) => setSelectedId(e.target.value)}
+            className="appearance-none pl-3 pr-8 py-2 text-[14px] font-medium border border-neutral-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary-400 min-w-[220px]"
+          >
+            <option value="__district__">District Overview</option>
+            {currentSummaries.map((s) => (
+              <option key={s.campus_id} value={s.campus_id}>
+                {s.campus_name}
+              </option>
+            ))}
+          </select>
+          <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 pointer-events-none" />
         </div>
       </div>
 
-      {/* Link back to Campus Reports */}
-      <Link
-        href="/pathways/campus-reports"
-        className="block p-4 bg-neutral-0 border border-neutral-200 rounded-lg hover:bg-neutral-50 transition-colors group"
-      >
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-[14px] font-medium text-neutral-900">View full campus reports</p>
-            <p className="text-[13px] text-neutral-600">See detailed breakdowns, action plans, and student lists</p>
+      {/* ── Current state pills ── */}
+      <div className="flex flex-wrap gap-3">
+        {[
+          { label: "Seniors",    value: selected.total_seniors.toString() },
+          { label: "CCMR Met",   value: `${selected.ccmr_met} (${fmt1(pct(selected.ccmr_met, selected.total_seniors))}%)` },
+          { label: "At Risk",    value: selected.at_risk.toString() },
+          { label: "Almost",     value: selected.almost.toString() },
+          { label: "Econ Disadv",value: selected.econ_total.toString() },
+          { label: "Missing ED", value: selected.missing_ed_forms.toString() },
+        ].map(({ label, value }) => (
+          <div key={label} className="bg-white border border-neutral-200 rounded-lg px-3 py-2">
+            <div className="text-[11px] text-neutral-500 uppercase tracking-wide">{label}</div>
+            <div className="text-[14px] font-semibold text-neutral-900 mt-0.5">{value}</div>
           </div>
-          <ArrowRight className="w-5 h-5 text-neutral-400 group-hover:text-primary-500 transition-colors" />
+        ))}
+      </div>
+
+      {/* ── Main grid ── */}
+      <div className="grid lg:grid-cols-5 gap-5 items-start">
+        {/* Left: Sliders */}
+        <div className="lg:col-span-2 space-y-4">
+          {/* CCMR Slider */}
+          <div className="bg-white border border-neutral-200 rounded-xl p-5 space-y-4">
+            <div>
+              <h2 className="text-[15px] font-semibold text-neutral-900">
+                What if more students meet CCMR?
+              </h2>
+              <p className="text-[12px] text-neutral-500 mt-0.5">
+                Drag to add students from the at-risk and almost groups.
+              </p>
+            </div>
+
+            <Slider
+              label="Additional students meeting CCMR"
+              value={ccmrAdd}
+              max={sliderMaxCCMR}
+              onChange={setCcmrAdd}
+              accentClass="accent-teal-600"
+            />
+
+            <div className="bg-teal-50 rounded-lg px-3 py-2.5 text-[12px] text-teal-800 space-y-0.5">
+              <div>
+                <span className="font-semibold">Projected:</span>{" "}
+                {projected.ccmrMet} of {projected.totalSeniors} seniors meet CCMR
+                {" "}→{" "}
+                <span className="font-semibold">{fmt1(projected.ccmrRate)}%</span>
+              </div>
+              <div className="text-teal-600">
+                Currently: {current.ccmrMet} of {current.totalSeniors} → {fmt1(current.ccmrRate)}%
+              </div>
+            </div>
+          </div>
+
+          {/* ED Slider */}
+          <div className="bg-white border border-neutral-200 rounded-xl p-5 space-y-4">
+            <div>
+              <h2 className="text-[15px] font-semibold text-neutral-900">
+                What if we collect missing ED forms?
+              </h2>
+              <p className="text-[12px] text-neutral-500 mt-0.5">
+                Documented econ-disadvantaged % shifts your Relative Performance cut points.
+              </p>
+            </div>
+
+            <Slider
+              label="Additional ED forms collected"
+              value={edAdd}
+              max={sliderMaxED}
+              onChange={setEdAdd}
+              disabled={sliderMaxED === 0}
+              accentClass="accent-primary-500"
+            />
+
+            <div className="bg-primary-50 rounded-lg px-3 py-2.5 text-[12px] text-primary-800 space-y-0.5">
+              <div>
+                <span className="font-semibold">Projected documented ED%:</span>{" "}
+                <span className="font-semibold">{fmt1(projected.edPct)}%</span>
+              </div>
+              <div className="text-primary-600">
+                Currently: {fmt1(current.edPct)}%
+              </div>
+            </div>
+          </div>
+
+          {/* Advanced inputs */}
+          <div className="bg-white border border-neutral-200 rounded-xl overflow-hidden">
+            <button
+              onClick={() => setAdvOpen(!advOpen)}
+              className="w-full flex items-center justify-between px-5 py-3.5 text-[14px] font-medium text-neutral-700 hover:bg-neutral-50 transition-colors"
+            >
+              <span>Additional district inputs</span>
+              {advOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </button>
+
+            {advOpen && (
+              <div className="px-5 pb-5 border-t border-neutral-100">
+                <p className="text-[12px] text-neutral-500 mt-3 mb-4">
+                  Enter your district&rsquo;s known scores for a more accurate simulation. These don&rsquo;t change with the sliders above.
+                </p>
+                <div className="grid grid-cols-2 gap-4">
+                  <NumInput
+                    label="STAAR performance %"
+                    value={staarRaw}
+                    onChange={setStaarRaw}
+                    hint="% of students meeting grade level on STAAR (all subjects)"
+                    suffix="%"
+                  />
+                  <NumInput
+                    label="Graduation rate %"
+                    value={gradRate}
+                    onChange={setGradRate}
+                    hint="4-year federal graduation rate"
+                    suffix="%"
+                  />
+                  <NumInput
+                    label="Academic Growth (Part A)"
+                    value={partA}
+                    onChange={setPartA}
+                    hint="Already-scaled Part A score from your TEA report (0-100)"
+                  />
+                  <NumInput
+                    label="Closing the Gaps"
+                    value={ctgScaled}
+                    onChange={setCtgScaled}
+                    hint="Already-scaled Closing the Gaps domain score from your TEA report (0-100)"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
         </div>
-      </Link>
+
+        {/* Right: Results */}
+        <div className="lg:col-span-3 space-y-4">
+          {/* Grade comparison banner */}
+          <div className="bg-white border border-neutral-200 rounded-xl p-5">
+            <div className="flex items-center justify-around">
+              <div className="text-center">
+                <p className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wide mb-2">Current</p>
+                <GradeBadge grade={current.grade} score={current.overall} size="lg" />
+              </div>
+
+              <div className="flex flex-col items-center gap-1">
+                <div className="text-neutral-300 text-2xl">→</div>
+                {gradeChanged && (
+                  <span className="text-[11px] font-semibold text-teal-600 bg-teal-50 px-2 py-0.5 rounded-full">
+                    {current.grade} → {projected.grade}
+                  </span>
+                )}
+              </div>
+
+              <div className="text-center">
+                <p className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wide mb-2">Projected</p>
+                <div
+                  className={cn(
+                    "transition-all duration-300",
+                    gradeFlash && "scale-110 drop-shadow-lg"
+                  )}
+                >
+                  <GradeBadge grade={projected.grade} score={projected.overall} size="lg" animated />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Comparison table */}
+          <div className="bg-white border border-neutral-200 rounded-xl overflow-hidden">
+            <div className="px-5 py-3 border-b border-neutral-100 flex items-center justify-between">
+              <h2 className="text-[14px] font-semibold text-neutral-900">Score breakdown</h2>
+              <span className="text-[11px] text-neutral-400">Updates in real time</span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full px-5">
+                <thead>
+                  <tr className="border-b border-neutral-100">
+                    <th className="px-5 py-2 text-left text-[11px] font-semibold text-neutral-500 uppercase tracking-wide w-[180px]">
+                      Metric
+                    </th>
+                    <th className="px-2 py-2 text-right text-[11px] font-semibold text-neutral-500 uppercase tracking-wide">
+                      Current
+                    </th>
+                    <th className="px-2 py-2 text-right text-[11px] font-semibold text-neutral-500 uppercase tracking-wide">
+                      Projected
+                    </th>
+                    <th className="px-5 py-2 text-right text-[11px] font-semibold text-neutral-500 uppercase tracking-wide">
+                      Change
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-50">
+                  {/* Rates */}
+                  <tr>
+                    <td colSpan={4} className="px-5 pt-3 pb-1 text-[11px] font-semibold text-neutral-400 uppercase tracking-wide">
+                      Input rates
+                    </td>
+                  </tr>
+                  <CompareRow
+                    label="CCMR Rate"
+                    current={<>{fmt1(current.ccmrRate)}%</>}
+                    projected={<>{fmt1(projected.ccmrRate)}%</>}
+                    delta={<DeltaPct a={current.ccmrRate} b={projected.ccmrRate} />}
+                    indent
+                  />
+                  <CompareRow
+                    label="Documented ED%"
+                    current={<>{fmt1(current.edPct)}%</>}
+                    projected={<>{fmt1(projected.edPct)}%</>}
+                    delta={<DeltaPct a={current.edPct} b={projected.edPct} />}
+                    indent
+                  />
+
+                  {/* Student Achievement */}
+                  <tr>
+                    <td colSpan={4} className="px-5 pt-3 pb-1 text-[11px] font-semibold text-neutral-400 uppercase tracking-wide">
+                      Student Achievement domain (SA)
+                    </td>
+                  </tr>
+                  <CompareRow
+                    label="CCMR scaled"
+                    current={current.ccmrScaled}
+                    projected={projected.ccmrScaled}
+                    delta={<Delta a={current.ccmrScaled} b={projected.ccmrScaled} />}
+                    indent
+                  />
+                  <CompareRow
+                    label="STAAR scaled"
+                    current={current.staarScaled}
+                    projected={projected.staarScaled}
+                    delta={<Delta a={current.staarScaled} b={projected.staarScaled} />}
+                    indent
+                  />
+                  <CompareRow
+                    label="Grad rate scaled"
+                    current={current.gradRateScaled}
+                    projected={projected.gradRateScaled}
+                    delta={<Delta a={current.gradRateScaled} b={projected.gradRateScaled} />}
+                    indent
+                  />
+                  <CompareRow
+                    label="Student Achievement"
+                    current={<ScoreCell score={current.studentAchievement} grade={letterGrade(current.studentAchievement)} />}
+                    projected={<ScoreCell score={projected.studentAchievement} grade={letterGrade(projected.studentAchievement)} />}
+                    delta={<Delta a={current.studentAchievement} b={projected.studentAchievement} />}
+                    highlight
+                  />
+
+                  {/* School Progress */}
+                  <tr>
+                    <td colSpan={4} className="px-5 pt-3 pb-1 text-[11px] font-semibold text-neutral-400 uppercase tracking-wide">
+                      School Progress domain (SP)
+                    </td>
+                  </tr>
+                  <CompareRow
+                    label="Part A (Academic Growth)"
+                    current={<ScoreCell score={current.partA} grade={letterGrade(current.partA)} />}
+                    projected={<ScoreCell score={projected.partA} grade={letterGrade(projected.partA)} />}
+                    delta={<Delta a={current.partA} b={projected.partA} />}
+                    indent
+                  />
+                  <CompareRow
+                    label="Part B (Relative Perf.)"
+                    current={<ScoreCell score={current.partB} grade={letterGrade(current.partB)} />}
+                    projected={<ScoreCell score={projected.partB} grade={letterGrade(projected.partB)} />}
+                    delta={<Delta a={current.partB} b={projected.partB} />}
+                    indent
+                  />
+                  <CompareRow
+                    label="School Progress"
+                    current={<ScoreCell score={current.schoolProgress} grade={letterGrade(current.schoolProgress)} />}
+                    projected={<ScoreCell score={projected.schoolProgress} grade={letterGrade(projected.schoolProgress)} />}
+                    delta={<Delta a={current.schoolProgress} b={projected.schoolProgress} />}
+                    highlight
+                  />
+
+                  {/* Closing Gaps + Overall */}
+                  <tr>
+                    <td colSpan={4} className="px-5 pt-3 pb-1 text-[11px] font-semibold text-neutral-400 uppercase tracking-wide">
+                      Overall
+                    </td>
+                  </tr>
+                  <CompareRow
+                    label="Closing the Gaps"
+                    current={<ScoreCell score={current.closingGaps} grade={letterGrade(current.closingGaps)} />}
+                    projected={<ScoreCell score={projected.closingGaps} grade={letterGrade(projected.closingGaps)} />}
+                    delta={<Delta a={current.closingGaps} b={projected.closingGaps} />}
+                    indent
+                  />
+                  <tr className="bg-neutral-900">
+                    <td className="px-5 py-3 text-[13px] font-bold text-white rounded-bl-lg">Overall Rating</td>
+                    <td className="px-2 py-3 text-right">
+                      <span className={cn("inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md font-bold text-[13px]", gradeRing(current.grade))}>
+                        {current.overall} <span>{current.grade}</span>
+                      </span>
+                    </td>
+                    <td className="px-2 py-3 text-right">
+                      <span className={cn(
+                        "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md font-bold text-[13px] transition-all duration-300",
+                        gradeRing(projected.grade),
+                        gradeFlash && "ring-2 scale-105"
+                      )}>
+                        {projected.overall} <span>{projected.grade}</span>
+                      </span>
+                    </td>
+                    <td className="px-5 py-3 text-right rounded-br-lg">
+                      <Delta a={current.overall} b={projected.overall} />
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {/* Formula notes */}
+            <div className="px-5 py-3 border-t border-neutral-100 text-[11px] text-neutral-400 space-y-0.5">
+              <p>SA = STAAR (40%) + CCMR (40%) + Grad Rate (20%)</p>
+              <p>SP = better of Part A and Part B (capped at 89 if either &lt; 60)</p>
+              <p>Overall = max(SA, SP) × 70% + Closing Gaps × 30%</p>
+            </div>
+          </div>
+
+          {/* Action plan */}
+          {actions.length > 0 && (
+            <div className="bg-white border border-neutral-200 rounded-xl p-5">
+              <h2 className="text-[14px] font-semibold text-neutral-900 mb-3">How to get there</h2>
+              <ul className="space-y-2">
+                {actions.map((a, i) => (
+                  <li key={i} className="flex items-start gap-2.5 text-[13px] text-neutral-700">
+                    <span className="flex-shrink-0 w-5 h-5 rounded-full bg-teal-100 text-teal-700 text-[11px] font-bold flex items-center justify-center mt-0.5">
+                      {i + 1}
+                    </span>
+                    {a}
+                  </li>
+                ))}
+                <li className="flex items-start gap-2.5 text-[13px] text-neutral-700 pt-1 border-t border-neutral-100 mt-2">
+                  <span className="flex-shrink-0 w-5 h-5 rounded-full bg-primary-100 text-primary-700 text-[11px] font-bold flex items-center justify-center mt-0.5">
+                    →
+                  </span>
+                  <span>
+                    <span className="font-medium">Combined impact:</span>{" "}
+                    Overall rating improves from{" "}
+                    <span className={cn("font-bold px-1 py-0.5 rounded", gradeRing(current.grade))}>
+                      {current.overall} ({current.grade})
+                    </span>{" "}
+                    to{" "}
+                    <span className={cn("font-bold px-1 py-0.5 rounded", gradeRing(projected.grade))}>
+                      {projected.overall} ({projected.grade})
+                    </span>
+                    {gradeChanged && (
+                      <span className="ml-2 text-teal-600 font-semibold">
+                        — letter grade improves!
+                      </span>
+                    )}
+                  </span>
+                </li>
+              </ul>
+            </div>
+          )}
+
+          {actions.length === 0 && (
+            <div className="bg-neutral-50 border border-dashed border-neutral-200 rounded-xl px-5 py-4 text-[13px] text-neutral-500 text-center">
+              Move the sliders above to generate your action plan.
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
-};
-
-export default AFSimulatorPage;
+}
