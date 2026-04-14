@@ -1,6 +1,21 @@
 import type { TypedSupabaseClient, IndicatorRow, IndicatorInsert, StudentUpdate, CCMRReadiness } from '@/types/database'
 import { computeCCMRReadiness } from '@/lib/ccmr'
 
+export async function getIndicatorsForStudents(
+  client: TypedSupabaseClient,
+  studentIds: string[]
+): Promise<IndicatorRow[]> {
+  if (studentIds.length === 0) return []
+  const { data, error } = await client
+    .from('ccmr_indicators')
+    .select('*')
+    .in('student_id', studentIds)
+    .in('status', ['met', 'in_progress'])
+    .order('indicator_type', { ascending: true })
+  if (error) throw error
+  return data ?? []
+}
+
 export async function getStudentIndicators(
   client: TypedSupabaseClient,
   studentId: string

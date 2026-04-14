@@ -6,558 +6,700 @@ import Link from "next/link";
 import {
   AlertCircle,
   CheckCircle2,
-  Download,
-  Mail,
-  Printer,
-  Calendar,
-  ChevronLeft,
   ChevronRight,
-  TrendingUp,
+  Search,
+  ChevronDown,
+  ChevronLeft,
+  Award,
+  BookOpen,
+  ClipboardList,
+  Clock,
+  CalendarClock,
 } from "lucide-react";
+import { markInterventionComplete } from "@/app/pathways/interventions/actions";
+import type {
+  CampusRow,
+  CCMRReadiness,
+  InterventionRow,
+  InterventionStatus,
+  StudentRow,
+} from "@/types/database";
 
 /* ============================================
-   Interventions Page
-   The core differentiator for Summit Pathways
+   Interventions Page — Counselor Action List
    ============================================ */
+
+// ============================================
+// CONSTANTS
+// ============================================
+
+const PAGE_SIZE = 25;
+
+// Pathway type classification helpers
+const isIBC = (t: string | null) => t === "ibc";
+const isCollegePrep = (t: string | null) => t === "college_prep_math" || t === "college_prep_ela" || t === "college_prep";
+const isTSI = (t: string | null) => t === "tsi_reading" || t === "tsi_math" || t === "tsi";
+
+const PATHWAY_LABEL: Record<string, string> = {
+  ibc: "IBC",
+  tsi_reading: "TSI Reading",
+  tsi_math: "TSI Math",
+  tsi: "TSI",
+  college_prep_ela: "College Prep ELA",
+  college_prep_math: "College Prep Math",
+  college_prep: "College Prep",
+};
+
+// ============================================
+// HELPERS
+// ============================================
+
+function formatDate(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function daysUntil(dateStr: string): number {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(dateStr);
+  target.setHours(0, 0, 0, 0);
+  return Math.ceil((target.getTime() - today.getTime()) / 86_400_000);
+}
 
 // ============================================
 // TYPES
 // ============================================
 
-interface IBCStudent {
-  id: string;
-  name: string;
-  campus: string;
-  ctePathway: string;
-  certification: string;
-  examStatus: "Scheduled" | "Not registered";
-  examDate: string | null;
-}
+type ActiveStatus = "recommended" | "planned" | "in_progress";
 
-interface CollegePrepStudent {
-  id: string;
-  name: string;
-  campus: string;
-  course: string;
-  currentGrade: string;
-  gradePercent: number;
-  creditsOnTrack: boolean;
-  atRiskOfFailing: boolean;
-}
+type PathwayFilter = "all" | "ibc" | "college_prep" | "tsi";
 
-interface TSIStudent {
-  id: string;
-  name: string;
-  campus: string;
-  tsiElaReady: string;
-  tsiMathReady: string;
-  satScore: string | null;
-  recommendedAction: string;
+interface Filters {
+  campusId: string;
+  pathway: PathwayFilter;
+  status: ActiveStatus | "all";
+  search: string;
 }
 
 // ============================================
-// MOCK DATA
+// CCMR STATUS BADGE (small)
 // ============================================
 
-const ibcStudents: IBCStudent[] = [
-  { id: "201502", name: "Luis Hernandez", campus: "Edinburg H S", ctePathway: "Welding", certification: "AWS Welding", examStatus: "Scheduled", examDate: "Apr 28" },
-  { id: "201567", name: "Maria Santos", campus: "Edinburg North", ctePathway: "Health Science", certification: "CNA", examStatus: "Not registered", examDate: null },
-  { id: "201890", name: "Carlos Vega", campus: "Vela H S", ctePathway: "Auto Tech", certification: "ASE Brakes", examStatus: "Scheduled", examDate: "May 2" },
-  { id: "201445", name: "Diana Torres", campus: "Economedes", ctePathway: "Cosmetology", certification: "TX Cosmetology", examStatus: "Not registered", examDate: null },
-  { id: "201334", name: "Roberto Cruz", campus: "Edinburg H S", ctePathway: "IT", certification: "CompTIA A+", examStatus: "Scheduled", examDate: "Apr 25" },
-  { id: "201556", name: "Ana Garcia", campus: "Vela H S", ctePathway: "Business", certification: "Microsoft Office", examStatus: "Not registered", examDate: null },
-  { id: "201623", name: "Jose Martinez", campus: "Edinburg North", ctePathway: "HVAC", certification: "EPA 608", examStatus: "Scheduled", examDate: "May 8" },
-  { id: "201789", name: "Elena Ruiz", campus: "Economedes", ctePathway: "Culinary", certification: "ServSafe", examStatus: "Scheduled", examDate: "Apr 30" },
-];
+const READINESS_CONFIG: Record<CCMRReadiness, { label: string; className: string }> = {
+  met: { label: "Met", className: "bg-teal-100 text-teal-700" },
+  on_track: { label: "On track", className: "bg-primary-100 text-primary-700" },
+  almost: { label: "Almost", className: "bg-warning-light text-warning-dark" },
+  at_risk: { label: "At risk", className: "bg-error-light text-error-dark" },
+  too_early: { label: "Too early", className: "bg-neutral-100 text-neutral-500" },
+};
 
-const collegePrepStudents: CollegePrepStudent[] = [
-  { id: "201678", name: "Ana Morales", campus: "Edinburg North", course: "College Prep ELA", currentGrade: "B+ (87)", gradePercent: 87, creditsOnTrack: true, atRiskOfFailing: false },
-  { id: "201712", name: "Pedro Garza", campus: "Edinburg H S", course: "College Prep Math", currentGrade: "D (62)", gradePercent: 62, creditsOnTrack: false, atRiskOfFailing: true },
-  { id: "201445", name: "Sofia Ruiz", campus: "Vela H S", course: "College Prep ELA", currentGrade: "C (74)", gradePercent: 74, creditsOnTrack: true, atRiskOfFailing: false },
-  { id: "201890", name: "Miguel Flores", campus: "Economedes", course: "College Prep Math", currentGrade: "F (54)", gradePercent: 54, creditsOnTrack: false, atRiskOfFailing: true },
-  { id: "201923", name: "Carmen Diaz", campus: "Edinburg North", course: "College Prep Math", currentGrade: "D- (61)", gradePercent: 61, creditsOnTrack: false, atRiskOfFailing: true },
-  { id: "201834", name: "David Lopez", campus: "Edinburg H S", course: "College Prep ELA", currentGrade: "C+ (78)", gradePercent: 78, creditsOnTrack: true, atRiskOfFailing: false },
-];
-
-const tsiStudents: TSIStudent[] = [
-  { id: "201556", name: "Jorge Ramirez", campus: "Edinburg North", tsiElaReady: "Unknown", tsiMathReady: "Unknown", satScore: null, recommendedAction: "Schedule TSIA — high priority" },
-  { id: "201623", name: "Elena Vasquez", campus: "Edinburg H S", tsiElaReady: "Unknown", tsiMathReady: "Unknown", satScore: "890", recommendedAction: "Schedule TSIA — SAT was close" },
-  { id: "201789", name: "David Tran", campus: "Vela H S", tsiElaReady: "Unknown", tsiMathReady: "Unknown", satScore: null, recommendedAction: "Schedule TSIA" },
-  { id: "201834", name: "Carmen Reyes", campus: "Economedes", tsiElaReady: "Unknown", tsiMathReady: "Unknown", satScore: "940", recommendedAction: "Schedule TSIA — SAT was close" },
-  { id: "201901", name: "Ricardo Mendez", campus: "Edinburg North", tsiElaReady: "Unknown", tsiMathReady: "Unknown", satScore: "870", recommendedAction: "Schedule TSIA — SAT was close" },
-  { id: "201945", name: "Isabella Cruz", campus: "Vela H S", tsiElaReady: "Unknown", tsiMathReady: "Unknown", satScore: null, recommendedAction: "Schedule TSIA" },
-];
+const CCMRBadge = ({ readiness }: { readiness: CCMRReadiness }) => {
+  const { label, className } = READINESS_CONFIG[readiness] ?? READINESS_CONFIG.too_early;
+  return (
+    <span className={cn("px-2 py-0.5 rounded-full text-[11px] font-medium", className)}>
+      {label}
+    </span>
+  );
+};
 
 // ============================================
-// IBC PATHWAY CARD
+// INTERVENTION STATUS BADGE
 // ============================================
 
-const IBCPathwayCard = () => {
-  const [currentPage, setCurrentPage] = React.useState(1);
-  const itemsPerPage = 5;
-  const totalPages = Math.ceil(ibcStudents.length / itemsPerPage);
-  const paginatedStudents = ibcStudents.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+const INTERVENTION_STATUS_CONFIG: Record<
+  InterventionStatus,
+  { label: string; className: string }
+> = {
+  recommended: { label: "Recommended", className: "bg-primary-100 text-primary-700" },
+  planned: { label: "Planned", className: "bg-amber-100 text-amber-700" },
+  in_progress: { label: "In progress", className: "bg-teal-100 text-teal-700" },
+  completed: { label: "Completed", className: "bg-neutral-100 text-neutral-500" },
+  expired: { label: "Expired", className: "bg-neutral-100 text-neutral-500" },
+  dismissed: { label: "Dismissed", className: "bg-neutral-100 text-neutral-500" },
+};
+
+const InterventionStatusBadge = ({ status }: { status: InterventionStatus }) => {
+  const { label, className } =
+    INTERVENTION_STATUS_CONFIG[status] ?? INTERVENTION_STATUS_CONFIG.recommended;
+  return (
+    <span className={cn("px-2 py-0.5 rounded-full text-[11px] font-medium", className)}>
+      {label}
+    </span>
+  );
+};
+
+// ============================================
+// SUMMARY CARDS
+// ============================================
+
+interface SummaryCardProps {
+  icon: React.ElementType;
+  title: string;
+  count: number;
+  seniorCount: number;
+  subtitle: string;
+  pathwayKey: PathwayFilter;
+  activeFilter: PathwayFilter;
+  onFilter: (p: PathwayFilter) => void;
+  iconBg: string;
+}
+
+const SummaryCard = ({
+  icon: Icon,
+  title,
+  count,
+  seniorCount,
+  subtitle,
+  pathwayKey,
+  activeFilter,
+  onFilter,
+  iconBg,
+}: SummaryCardProps) => {
+  const isActive = activeFilter === pathwayKey;
+  const impactPct =
+    seniorCount > 0 ? Math.round((count / seniorCount) * 100) : 0;
+
+  return (
+    <div
+      className={cn(
+        "bg-neutral-0 border rounded-lg p-5 flex flex-col gap-3 cursor-pointer transition-all",
+        isActive
+          ? "border-teal-400 ring-2 ring-teal-200 shadow-sm"
+          : "border-neutral-200 hover:border-neutral-300"
+      )}
+      onClick={() => onFilter(isActive ? "all" : pathwayKey)}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0", iconBg)}>
+          <Icon className="w-4.5 h-4.5 text-neutral-0 w-5 h-5" />
+        </div>
+        <span className="px-2.5 py-1 bg-teal-50 text-teal-700 text-[11px] font-semibold rounded-full border border-teal-200">
+          +{impactPct}% CCMR if all pass
+        </span>
+      </div>
+
+      <div>
+        <h3 className="text-[15px] font-semibold text-neutral-900">{title}</h3>
+        <p className="text-[12px] text-neutral-500 mt-0.5">{subtitle}</p>
+      </div>
+
+      <div className="flex items-center justify-between pt-1 border-t border-neutral-100">
+        <span className="text-[22px] font-bold text-neutral-900">
+          {count}{" "}
+          <span className="text-[13px] font-normal text-neutral-500">students</span>
+        </span>
+        <button
+          className={cn(
+            "flex items-center gap-1 text-[12px] font-medium transition-colors",
+            isActive ? "text-teal-600" : "text-primary-500 hover:text-primary-600"
+          )}
+          onClick={(e) => {
+            e.stopPropagation();
+            onFilter(isActive ? "all" : pathwayKey);
+          }}
+        >
+          {isActive ? "Clear filter" : `View ${count} students`}
+          <ChevronRight className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// ============================================
+// FILTER BAR
+// ============================================
+
+interface FilterBarProps {
+  filters: Filters;
+  campuses: CampusRow[];
+  onChange: (f: Filters) => void;
+}
+
+const FilterBar = ({ filters, campuses, onChange }: FilterBarProps) => {
+  const [searchDraft, setSearchDraft] = React.useState(filters.search);
+
+  React.useEffect(() => {
+    const t = setTimeout(() => {
+      if (searchDraft !== filters.search) {
+        onChange({ ...filters, search: searchDraft });
+      }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [searchDraft]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const set = (partial: Partial<Filters>) => onChange({ ...filters, ...partial });
+
+  return (
+    <div className="bg-neutral-0 border border-neutral-200 rounded-lg p-4">
+      <div className="flex flex-wrap items-center gap-3">
+        {/* Campus */}
+        <div className="relative">
+          <select
+            value={filters.campusId}
+            onChange={(e) => set({ campusId: e.target.value })}
+            className="appearance-none bg-neutral-0 border border-neutral-200 rounded-md px-3 py-2 pr-8 text-[13px] font-medium text-neutral-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
+          >
+            <option value="">All campuses</option>
+            {campuses.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 pointer-events-none" />
+        </div>
+
+        {/* Pathway type */}
+        <div className="relative">
+          <select
+            value={filters.pathway}
+            onChange={(e) => set({ pathway: e.target.value as PathwayFilter })}
+            className="appearance-none bg-neutral-0 border border-neutral-200 rounded-md px-3 py-2 pr-8 text-[13px] font-medium text-neutral-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
+          >
+            <option value="all">All pathways</option>
+            <option value="ibc">IBC</option>
+            <option value="college_prep">College prep</option>
+            <option value="tsi">TSI</option>
+          </select>
+          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 pointer-events-none" />
+        </div>
+
+        {/* Status */}
+        <div className="relative">
+          <select
+            value={filters.status}
+            onChange={(e) =>
+              set({ status: e.target.value as ActiveStatus | "all" })
+            }
+            className="appearance-none bg-neutral-0 border border-neutral-200 rounded-md px-3 py-2 pr-8 text-[13px] font-medium text-neutral-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
+          >
+            <option value="all">All statuses</option>
+            <option value="recommended">Recommended</option>
+            <option value="planned">Planned</option>
+            <option value="in_progress">In progress</option>
+          </select>
+          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 pointer-events-none" />
+        </div>
+
+        {/* Search */}
+        <div className="relative flex-1 min-w-[220px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
+          <input
+            type="text"
+            value={searchDraft}
+            onChange={(e) => setSearchDraft(e.target.value)}
+            placeholder="Search by student name..."
+            className="w-full bg-neutral-0 border border-neutral-200 rounded-md pl-9 pr-3 py-2 text-[13px] placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-teal-500"
+          />
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ============================================
+// INTERVENTIONS TABLE
+// ============================================
+
+interface TableRow {
+  intervention: InterventionRow;
+  student: StudentRow;
+  campusName: string;
+}
+
+interface InterventionsTableProps {
+  rows: TableRow[];
+  onMarkComplete: (id: string) => void;
+}
+
+const InterventionsTable = ({ rows, onMarkComplete }: InterventionsTableProps) => {
+  const [page, setPage] = React.useState(1);
+
+  // Reset page when rows change
+  React.useEffect(() => setPage(1), [rows.length]);
+
+  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const pageRows = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  if (rows.length === 0) {
+    return (
+      <div className="bg-neutral-0 border border-neutral-200 rounded-lg p-12 text-center">
+        <ClipboardList className="w-8 h-8 text-neutral-300 mx-auto mb-3" />
+        <p className="text-[14px] font-medium text-neutral-600">No interventions match the current filters.</p>
+        <p className="text-[13px] text-neutral-400 mt-1">Try adjusting campus, pathway, or status filters.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-neutral-0 border border-neutral-200 rounded-lg overflow-hidden">
-      {/* Header */}
-      <div className="p-6 border-b border-neutral-200">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h3 className="text-[18px] font-semibold text-neutral-900">IBC exam completion</h3>
-            <p className="text-[14px] text-neutral-600 mt-1">
-              134 at-risk seniors with IBC-aligned CTE enrollment
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="px-3 py-1.5 bg-teal-100 text-teal-700 text-[13px] font-semibold rounded-full">
-              +11% CCMR rate if all pass
-            </span>
-          </div>
-        </div>
-        <p className="text-[13px] text-neutral-500 mt-3 flex items-center gap-2">
-          <Calendar className="w-4 h-4" />
-          Spring testing window closes May 15, 2026
-        </p>
-      </div>
-
-      {/* Table */}
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead>
             <tr className="bg-neutral-50 border-b border-neutral-200">
-              <th className="px-4 py-3 text-left text-[12px] font-semibold text-neutral-700">Student</th>
-              <th className="px-4 py-3 text-left text-[12px] font-semibold text-neutral-700">Campus</th>
-              <th className="px-4 py-3 text-left text-[12px] font-semibold text-neutral-700">CTE pathway</th>
-              <th className="px-4 py-3 text-left text-[12px] font-semibold text-neutral-700">Certification</th>
-              <th className="px-4 py-3 text-left text-[12px] font-semibold text-neutral-700">Exam status</th>
-              <th className="px-4 py-3 text-left text-[12px] font-semibold text-neutral-700">Exam date</th>
-              <th className="px-4 py-3 text-left text-[12px] font-semibold text-neutral-700">Action</th>
+              <th className="text-left text-[12px] font-semibold text-neutral-700 px-4 py-3">Student</th>
+              <th className="text-left text-[12px] font-semibold text-neutral-700 px-4 py-3">Campus</th>
+              <th className="text-left text-[12px] font-semibold text-neutral-700 px-4 py-3">CCMR</th>
+              <th className="text-left text-[12px] font-semibold text-neutral-700 px-4 py-3">Intervention</th>
+              <th className="text-left text-[12px] font-semibold text-neutral-700 px-4 py-3">Pathway</th>
+              <th className="text-left text-[12px] font-semibold text-neutral-700 px-4 py-3">Status</th>
+              <th className="text-left text-[12px] font-semibold text-neutral-700 px-4 py-3">Due date</th>
+              <th className="text-left text-[12px] font-semibold text-neutral-700 px-4 py-3">Assigned to</th>
+              <th className="text-right text-[12px] font-semibold text-neutral-700 px-4 py-3">Action</th>
             </tr>
           </thead>
           <tbody>
-            {paginatedStudents.map((student) => (
-              <tr 
-                key={student.id} 
-                className={cn(
-                  "border-b border-neutral-100 last:border-0",
-                  student.examStatus === "Not registered" && "border-l-4 border-l-error bg-error-light/30"
-                )}
-              >
-                <td className="px-4 py-3">
-                  <Link href={`/pathways/students/${student.id}`} className="text-[13px] font-medium text-primary-500 hover:text-primary-600">
-                    {student.name} #{student.id}
-                  </Link>
-                </td>
-                <td className="px-4 py-3 text-[13px] text-neutral-700">{student.campus}</td>
-                <td className="px-4 py-3 text-[13px] text-neutral-700">{student.ctePathway}</td>
-                <td className="px-4 py-3 text-[13px] text-neutral-700">{student.certification}</td>
-                <td className="px-4 py-3">
-                  <span className={cn(
-                    "px-2 py-1 text-[12px] font-medium rounded",
-                    student.examStatus === "Scheduled" 
-                      ? "bg-teal-100 text-teal-700"
-                      : "bg-error-light text-error-dark"
-                  )}>
-                    {student.examStatus}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-[13px] text-neutral-700">
-                  {student.examDate || "—"}
-                </td>
-                <td className="px-4 py-3">
-                  {student.examStatus === "Scheduled" ? (
-                    <span className="flex items-center gap-1 text-[13px] text-teal-600 font-medium">
-                      <CheckCircle2 className="w-4 h-4" />
-                      Confirm registration
-                    </span>
-                  ) : (
-                    <button className="text-[13px] font-medium text-error hover:text-error-dark">
-                      Register now
-                    </button>
+            {pageRows.map(({ intervention, student, campusName }) => {
+              const days = intervention.due_date ? daysUntil(intervention.due_date) : null;
+              const isUrgent = days !== null && days <= 14;
+              const isOverdue = days !== null && days < 0;
+              const initials = (student.last_name[0] ?? "") + (student.first_name[0] ?? "");
+
+              return (
+                <tr
+                  key={intervention.id}
+                  className={cn(
+                    "border-b border-neutral-100 last:border-0 hover:bg-neutral-50 transition-colors",
+                    isOverdue && "border-l-4 border-l-error"
                   )}
-                </td>
-              </tr>
-            ))}
+                >
+                  {/* Student */}
+                  <td className="px-4 py-3">
+                    <Link
+                      href={`/pathways/students/${student.id}`}
+                      className="flex items-center gap-2.5 group"
+                    >
+                      <div className="w-8 h-8 bg-teal-100 rounded-full flex items-center justify-center flex-shrink-0">
+                        <span className="text-[11px] font-semibold text-teal-700 uppercase">{initials}</span>
+                      </div>
+                      <div>
+                        <p className="text-[13px] font-medium text-neutral-900 group-hover:text-teal-700">
+                          {student.last_name}, {student.first_name}
+                        </p>
+                        <p className="text-[11px] text-neutral-500">#{student.tsds_id}</p>
+                      </div>
+                    </Link>
+                  </td>
+
+                  {/* Campus */}
+                  <td className="px-4 py-3 text-[13px] text-neutral-700">{campusName}</td>
+
+                  {/* CCMR status */}
+                  <td className="px-4 py-3">
+                    <CCMRBadge readiness={student.ccmr_readiness} />
+                  </td>
+
+                  {/* Intervention title */}
+                  <td className="px-4 py-3">
+                    <p className="text-[13px] font-medium text-neutral-900">{intervention.title}</p>
+                    {intervention.description && (
+                      <p className="text-[11px] text-neutral-500 mt-0.5 max-w-[200px] truncate">
+                        {intervention.description}
+                      </p>
+                    )}
+                  </td>
+
+                  {/* Pathway type */}
+                  <td className="px-4 py-3">
+                    <span className="text-[12px] font-medium text-neutral-700">
+                      {intervention.pathway_type
+                        ? (PATHWAY_LABEL[intervention.pathway_type] ?? intervention.pathway_type)
+                        : "—"}
+                    </span>
+                  </td>
+
+                  {/* Status */}
+                  <td className="px-4 py-3">
+                    <InterventionStatusBadge status={intervention.status} />
+                  </td>
+
+                  {/* Due date */}
+                  <td className="px-4 py-3">
+                    {intervention.due_date ? (
+                      <div className="flex items-center gap-1.5">
+                        {isUrgent && (
+                          <CalendarClock
+                            className={cn(
+                              "w-3.5 h-3.5 flex-shrink-0",
+                              isOverdue ? "text-error" : "text-warning-dark"
+                            )}
+                          />
+                        )}
+                        <span
+                          className={cn(
+                            "text-[13px] font-medium",
+                            isOverdue
+                              ? "text-error"
+                              : isUrgent
+                              ? "text-warning-dark"
+                              : "text-neutral-700"
+                          )}
+                        >
+                          {isOverdue
+                            ? `${Math.abs(days!)}d overdue`
+                            : formatDate(intervention.due_date)}
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-neutral-400">—</span>
+                    )}
+                  </td>
+
+                  {/* Assigned to */}
+                  <td className="px-4 py-3 text-[13px] text-neutral-600">
+                    {intervention.assigned_to ?? <span className="text-neutral-400">—</span>}
+                  </td>
+
+                  {/* Actions */}
+                  <td className="px-4 py-3 text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      <Link
+                        href={`/pathways/students/${student.id}`}
+                        className="text-[13px] font-medium text-primary-500 hover:text-primary-600"
+                      >
+                        View
+                      </Link>
+                      <span className="text-neutral-300">·</span>
+                      <button
+                        onClick={() => onMarkComplete(intervention.id)}
+                        className="text-[13px] font-medium text-teal-600 hover:text-teal-700 flex items-center gap-1"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        Done
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
 
       {/* Pagination */}
-      <div className="flex items-center justify-between px-4 py-3 border-t border-neutral-200 bg-neutral-50">
+      <div className="px-4 py-3 border-t border-neutral-200 flex items-center justify-between bg-neutral-50">
         <p className="text-[13px] text-neutral-600">
-          Showing {(currentPage - 1) * itemsPerPage + 1}-{Math.min(currentPage * itemsPerPage, ibcStudents.length)} of 134 students
+          Showing{" "}
+          <span className="font-medium">
+            {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, rows.length)}
+          </span>{" "}
+          of <span className="font-medium">{rows.length}</span> interventions
         </p>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-            disabled={currentPage === 1}
-            className="p-1.5 rounded border border-neutral-200 hover:bg-neutral-100 disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page <= 1}
+            className="p-1.5 rounded border border-neutral-200 hover:bg-neutral-100 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
           <span className="text-[13px] text-neutral-600">
-            Page {currentPage} of {totalPages}
+            {page} / {totalPages}
           </span>
           <button
-            onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-            disabled={currentPage === totalPages}
-            className="p-1.5 rounded border border-neutral-200 hover:bg-neutral-100 disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={page >= totalPages}
+            className="p-1.5 rounded border border-neutral-200 hover:bg-neutral-100 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <ChevronRight className="w-4 h-4" />
           </button>
         </div>
       </div>
-
-      {/* Actions */}
-      <div className="flex flex-wrap items-center gap-3 px-6 py-4 border-t border-neutral-200">
-        <button className="px-4 py-2 border border-neutral-200 text-neutral-700 text-[13px] font-medium rounded-md hover:bg-neutral-50 transition-colors flex items-center gap-2">
-          <Download className="w-4 h-4" />
-          Export IBC intervention list
-        </button>
-        <button className="px-4 py-2 border border-neutral-200 text-neutral-700 text-[13px] font-medium rounded-md hover:bg-neutral-50 transition-colors flex items-center gap-2">
-          <Mail className="w-4 h-4" />
-          Email CTE teachers
-        </button>
-        <button className="px-4 py-2 border border-neutral-200 text-neutral-700 text-[13px] font-medium rounded-md hover:bg-neutral-50 transition-colors flex items-center gap-2">
-          <Printer className="w-4 h-4" />
-          Print counselor checklist
-        </button>
-      </div>
     </div>
   );
 };
 
 // ============================================
-// COLLEGE PREP PATHWAY CARD
+// MAIN COMPONENT
 // ============================================
 
-const CollegePrepPathwayCard = () => {
-  const [currentPage, setCurrentPage] = React.useState(1);
-  const itemsPerPage = 5;
-  const totalPages = Math.ceil(collegePrepStudents.length / itemsPerPage);
-  const paginatedStudents = collegePrepStudents.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+export interface InterventionsPageProps {
+  interventions: InterventionRow[];
+  students: StudentRow[];
+  campuses: CampusRow[];
+  seniorCount: number;
+}
 
-  return (
-    <div className="bg-neutral-0 border border-neutral-200 rounded-lg overflow-hidden">
-      {/* Header */}
-      <div className="p-6 border-b border-neutral-200">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h3 className="text-[18px] font-semibold text-neutral-900">College prep course verification</h3>
-            <p className="text-[14px] text-neutral-600 mt-1">
-              89 at-risk seniors enrolled in college prep ELA or Math
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="px-3 py-1.5 bg-teal-100 text-teal-700 text-[13px] font-semibold rounded-full">
-              +7% CCMR rate
-            </span>
-          </div>
-        </div>
-        <p className="text-[13px] text-neutral-500 mt-3 flex items-center gap-2">
-          <Calendar className="w-4 h-4" />
-          Semester ends May 23, 2026
-        </p>
-      </div>
+export const InterventionsPage = ({
+  interventions: initialInterventions,
+  students,
+  campuses,
+  seniorCount,
+}: InterventionsPageProps) => {
+  const [interventions, setInterventions] = React.useState(initialInterventions);
+  const [pathwayFilter, setPathwayFilter] = React.useState<PathwayFilter>("all");
+  const [filters, setFilters] = React.useState<Filters>({
+    campusId: "",
+    pathway: "all",
+    status: "all",
+    search: "",
+  });
+  const [isPending, startTransition] = React.useTransition();
 
-      {/* Table */}
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr className="bg-neutral-50 border-b border-neutral-200">
-              <th className="px-4 py-3 text-left text-[12px] font-semibold text-neutral-700">Student</th>
-              <th className="px-4 py-3 text-left text-[12px] font-semibold text-neutral-700">Campus</th>
-              <th className="px-4 py-3 text-left text-[12px] font-semibold text-neutral-700">Course</th>
-              <th className="px-4 py-3 text-left text-[12px] font-semibold text-neutral-700">Current grade</th>
-              <th className="px-4 py-3 text-left text-[12px] font-semibold text-neutral-700">Credits earned</th>
-              <th className="px-4 py-3 text-left text-[12px] font-semibold text-neutral-700">At risk of failing?</th>
-              <th className="px-4 py-3 text-left text-[12px] font-semibold text-neutral-700">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {paginatedStudents.map((student) => (
-              <tr 
-                key={student.id} 
-                className={cn(
-                  "border-b border-neutral-100 last:border-0",
-                  student.atRiskOfFailing && "border-l-4 border-l-error bg-error-light/30"
-                )}
-              >
-                <td className="px-4 py-3">
-                  <Link href={`/pathways/students/${student.id}`} className="text-[13px] font-medium text-primary-500 hover:text-primary-600">
-                    {student.name} #{student.id}
-                  </Link>
-                </td>
-                <td className="px-4 py-3 text-[13px] text-neutral-700">{student.campus}</td>
-                <td className="px-4 py-3 text-[13px] text-neutral-700">{student.course}</td>
-                <td className="px-4 py-3">
-                  <span className={cn(
-                    "text-[13px] font-medium",
-                    student.gradePercent >= 80 ? "text-teal-600" :
-                    student.gradePercent >= 70 ? "text-neutral-700" :
-                    student.gradePercent >= 60 ? "text-warning-dark" : "text-error"
-                  )}>
-                    {student.currentGrade}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-[13px] text-neutral-700">
-                  {student.creditsOnTrack ? "On track" : "At risk"}
-                </td>
-                <td className="px-4 py-3">
-                  {student.atRiskOfFailing ? (
-                    <span className="px-2 py-1 bg-error-light text-error-dark text-[12px] font-medium rounded">
-                      Yes
-                    </span>
-                  ) : (
-                    <span className="text-[13px] text-neutral-500">No</span>
-                  )}
-                </td>
-                <td className="px-4 py-3">
-                  {student.atRiskOfFailing ? (
-                    <button className="text-[13px] font-medium text-error hover:text-error-dark">
-                      Intervention needed
-                    </button>
-                  ) : (
-                    <span className="text-[13px] text-neutral-500">Monitor</span>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+  // Keep pathwayFilter in sync with filters.pathway (cards update the filter bar too)
+  const handlePathwayCard = (p: PathwayFilter) => {
+    setPathwayFilter(p);
+    setFilters((f) => ({ ...f, pathway: p }));
+  };
 
-      {/* Pagination */}
-      <div className="flex items-center justify-between px-4 py-3 border-t border-neutral-200 bg-neutral-50">
-        <p className="text-[13px] text-neutral-600">
-          Showing {(currentPage - 1) * itemsPerPage + 1}-{Math.min(currentPage * itemsPerPage, collegePrepStudents.length)} of 89 students
-        </p>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-            disabled={currentPage === 1}
-            className="p-1.5 rounded border border-neutral-200 hover:bg-neutral-100 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          <span className="text-[13px] text-neutral-600">
-            Page {currentPage} of {totalPages}
-          </span>
-          <button
-            onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-            disabled={currentPage === totalPages}
-            className="p-1.5 rounded border border-neutral-200 hover:bg-neutral-100 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
+  const handleFilterChange = (f: Filters) => {
+    setFilters(f);
+    setPathwayFilter(f.pathway);
+  };
 
-      {/* Actions */}
-      <div className="flex flex-wrap items-center gap-3 px-6 py-4 border-t border-neutral-200">
-        <button className="px-4 py-2 border border-neutral-200 text-neutral-700 text-[13px] font-medium rounded-md hover:bg-neutral-50 transition-colors flex items-center gap-2">
-          <Download className="w-4 h-4" />
-          Export college prep list
-        </button>
-        <button className="px-4 py-2 border border-neutral-200 text-neutral-700 text-[13px] font-medium rounded-md hover:bg-neutral-50 transition-colors flex items-center gap-2">
-          <Mail className="w-4 h-4" />
-          Email teachers for grade updates
-        </button>
-      </div>
-    </div>
+  // Build lookup maps
+  const studentById = React.useMemo(
+    () => new Map(students.map((s) => [s.id, s])),
+    [students]
   );
-};
-
-// ============================================
-// TSI PATHWAY CARD
-// ============================================
-
-const TSIPathwayCard = () => {
-  const [currentPage, setCurrentPage] = React.useState(1);
-  const itemsPerPage = 5;
-  const totalPages = Math.ceil(tsiStudents.length / itemsPerPage);
-  const paginatedStudents = tsiStudents.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
-
-  return (
-    <div className="bg-neutral-0 border border-neutral-200 rounded-lg overflow-hidden">
-      {/* Header */}
-      <div className="p-6 border-b border-neutral-200">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h3 className="text-[18px] font-semibold text-neutral-900">TSIA testing opportunity</h3>
-            <p className="text-[14px] text-neutral-600 mt-1">
-              138 at-risk seniors who have never attempted the TSIA
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="px-3 py-1.5 bg-teal-100 text-teal-700 text-[13px] font-semibold rounded-full">
-              +11% CCMR rate (est. 50% pass)
-            </span>
-          </div>
-        </div>
-        <p className="text-[13px] text-neutral-500 mt-3 flex items-center gap-2">
-          <Calendar className="w-4 h-4" />
-          Final testing window: May 1-15, 2026
-        </p>
-      </div>
-
-      {/* Table */}
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr className="bg-neutral-50 border-b border-neutral-200">
-              <th className="px-4 py-3 text-left text-[12px] font-semibold text-neutral-700">Student</th>
-              <th className="px-4 py-3 text-left text-[12px] font-semibold text-neutral-700">Campus</th>
-              <th className="px-4 py-3 text-left text-[12px] font-semibold text-neutral-700">TSI ELA ready?</th>
-              <th className="px-4 py-3 text-left text-[12px] font-semibold text-neutral-700">TSI Math ready?</th>
-              <th className="px-4 py-3 text-left text-[12px] font-semibold text-neutral-700">SAT score (if taken)</th>
-              <th className="px-4 py-3 text-left text-[12px] font-semibold text-neutral-700">Recommended action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {paginatedStudents.map((student) => (
-              <tr 
-                key={student.id} 
-                className="border-b border-neutral-100 last:border-0"
-              >
-                <td className="px-4 py-3">
-                  <Link href={`/pathways/students/${student.id}`} className="text-[13px] font-medium text-primary-500 hover:text-primary-600">
-                    {student.name} #{student.id}
-                  </Link>
-                </td>
-                <td className="px-4 py-3 text-[13px] text-neutral-700">{student.campus}</td>
-                <td className="px-4 py-3 text-[13px] text-neutral-500">{student.tsiElaReady}</td>
-                <td className="px-4 py-3 text-[13px] text-neutral-500">{student.tsiMathReady}</td>
-                <td className="px-4 py-3 text-[13px] text-neutral-700">
-                  {student.satScore ? (
-                    <span className={cn(
-                      parseInt(student.satScore) >= 940 ? "text-warning-dark" : "text-neutral-700"
-                    )}>
-                      {student.satScore} {parseInt(student.satScore) >= 900 && "(below threshold)"}
-                    </span>
-                  ) : (
-                    <span className="text-neutral-400">Never taken</span>
-                  )}
-                </td>
-                <td className="px-4 py-3">
-                  <button className="text-[13px] font-medium text-primary-500 hover:text-primary-600">
-                    {student.recommendedAction}
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Note */}
-      <div className="px-6 py-3 bg-primary-50 border-t border-primary-100">
-        <p className="text-[12px] text-primary-700">
-          Students with SAT scores near the threshold (1000+) are strong TSIA candidates — the TSIA has different cut scores and format.
-        </p>
-      </div>
-
-      {/* Pagination */}
-      <div className="flex items-center justify-between px-4 py-3 border-t border-neutral-200 bg-neutral-50">
-        <p className="text-[13px] text-neutral-600">
-          Showing {(currentPage - 1) * itemsPerPage + 1}-{Math.min(currentPage * itemsPerPage, tsiStudents.length)} of 138 students
-        </p>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-            disabled={currentPage === 1}
-            className="p-1.5 rounded border border-neutral-200 hover:bg-neutral-100 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          <span className="text-[13px] text-neutral-600">
-            Page {currentPage} of {totalPages}
-          </span>
-          <button
-            onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-            disabled={currentPage === totalPages}
-            className="p-1.5 rounded border border-neutral-200 hover:bg-neutral-100 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
-
-      {/* Actions */}
-      <div className="flex flex-wrap items-center gap-3 px-6 py-4 border-t border-neutral-200">
-        <button className="px-4 py-2 border border-neutral-200 text-neutral-700 text-[13px] font-medium rounded-md hover:bg-neutral-50 transition-colors flex items-center gap-2">
-          <Download className="w-4 h-4" />
-          Export TSI scheduling list
-        </button>
-        <button className="px-4 py-2 bg-teal-600 text-neutral-0 text-[13px] font-medium rounded-md hover:bg-teal-700 transition-colors flex items-center gap-2">
-          <Calendar className="w-4 h-4" />
-          Schedule bulk TSIA session
-        </button>
-      </div>
-    </div>
+  const campusById = React.useMemo(
+    () => new Map(campuses.map((c) => [c.id, c.name])),
+    [campuses]
   );
-};
 
-// ============================================
-// INTERVENTION TRACKING CARD
-// ============================================
+  // Summary counts
+  const ibcCount = interventions.filter((i) => isIBC(i.pathway_type)).length;
+  const collegePrepCount = interventions.filter((i) => isCollegePrep(i.pathway_type)).length;
+  const tsiCount = interventions.filter((i) => isTSI(i.pathway_type)).length;
+  const atRiskCount = [...new Set(
+    interventions
+      .filter((i) => {
+        const s = studentById.get(i.student_id);
+        return s?.ccmr_readiness === "at_risk";
+      })
+      .map((i) => i.student_id)
+  )].length;
 
-const InterventionTrackingCard = () => {
-  return (
-    <div className="bg-neutral-0 border border-neutral-200 rounded-lg p-6">
-      <h3 className="text-[16px] font-semibold text-neutral-900 mb-4">Intervention tracking</h3>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="p-4 bg-neutral-50 rounded-lg">
-          <p className="text-[12px] text-neutral-500 mb-1">Interventions started this month</p>
-          <p className="text-[24px] font-bold text-neutral-900">47 <span className="text-[14px] font-normal text-neutral-500">students</span></p>
-        </div>
-        <div className="p-4 bg-neutral-50 rounded-lg">
-          <p className="text-[12px] text-neutral-500 mb-1">CCMR indicators earned since Sept 1</p>
-          <p className="text-[24px] font-bold text-teal-600">89 <span className="text-[14px] font-normal text-neutral-500">students</span></p>
-        </div>
-        <div className="p-4 bg-neutral-50 rounded-lg">
-          <p className="text-[12px] text-neutral-500 mb-1">Projected CCMR rate if interventions succeed</p>
-          <p className="text-[24px] font-bold text-primary-500">74% <span className="text-[14px] font-normal text-teal-600 flex items-center gap-1"><TrendingUp className="w-4 h-4" /> up from 70%</span></p>
-        </div>
-      </div>
-    </div>
-  );
-};
+  // Apply all filters and sort
+  const filteredRows = React.useMemo<TableRow[]>(() => {
+    const searchLower = filters.search.toLowerCase();
 
-// ============================================
-// MAIN INTERVENTIONS PAGE
-// ============================================
+    return interventions
+      .filter((intervention) => {
+        const student = studentById.get(intervention.student_id);
+        if (!student) return false;
 
-export const InterventionsPage = () => {
+        if (filters.campusId && student.campus_id !== filters.campusId) return false;
+        if (filters.status !== "all" && intervention.status !== filters.status) return false;
+
+        if (filters.pathway !== "all") {
+          const pt = intervention.pathway_type;
+          if (filters.pathway === "ibc" && !isIBC(pt)) return false;
+          if (filters.pathway === "college_prep" && !isCollegePrep(pt)) return false;
+          if (filters.pathway === "tsi" && !isTSI(pt)) return false;
+        }
+
+        if (searchLower) {
+          const name = `${student.first_name} ${student.last_name}`.toLowerCase();
+          if (!name.includes(searchLower)) return false;
+        }
+
+        return true;
+      })
+      .sort((a, b) => {
+        // Priority ascending (1 = highest), null last
+        const pa = a.priority ?? 99;
+        const pb = b.priority ?? 99;
+        if (pa !== pb) return pa - pb;
+        // Then due_date ascending, null last
+        const da = a.due_date ? new Date(a.due_date).getTime() : Infinity;
+        const db = b.due_date ? new Date(b.due_date).getTime() : Infinity;
+        return da - db;
+      })
+      .map((intervention) => {
+        const student = studentById.get(intervention.student_id)!;
+        const campusName = campusById.get(student.campus_id) ?? "—";
+        return { intervention, student, campusName };
+      });
+  }, [interventions, filters, studentById, campusById]);
+
+  const handleMarkComplete = (id: string) => {
+    // Optimistic removal
+    setInterventions((prev) => prev.filter((i) => i.id !== id));
+    startTransition(async () => {
+      try {
+        await markInterventionComplete(id);
+      } catch {
+        // Re-add on failure
+        setInterventions(initialInterventions);
+      }
+    });
+  };
+
   return (
     <div className="space-y-6">
-      {/* Top callout banner */}
-      <div className="p-5 bg-warning-light border border-warning/30 rounded-lg">
-        <div className="flex items-start gap-3">
+      {/* Page header */}
+      <div>
+        <h1 className="text-[24px] font-semibold text-neutral-900">Interventions</h1>
+        <p className="text-[14px] text-neutral-600 mt-1">
+          Counselor action list — at-risk students grouped by CCMR pathway
+        </p>
+      </div>
+
+      {/* Alert banner */}
+      {atRiskCount > 0 && (
+        <div className="p-4 bg-warning-light border border-warning/30 rounded-lg flex items-start gap-3">
           <AlertCircle className="w-5 h-5 text-warning-dark flex-shrink-0 mt-0.5" />
           <div>
-            <p className="text-[16px] font-semibold text-warning-dark">
-              361 seniors are at risk of graduating without CCMR.
+            <p className="text-[14px] font-semibold text-warning-dark">
+              {atRiskCount} at-risk senior{atRiskCount !== 1 ? "s" : ""} with open interventions
             </p>
-            <p className="text-[14px] text-warning-dark/80 mt-1">
-              Below are the three fastest intervention pathways, sorted by potential impact. Each list is actionable — counselors can work through these students one by one.
+            <p className="text-[13px] text-warning-dark/80 mt-0.5">
+              These students have no CCMR indicator met yet. Click a pathway card to filter.
             </p>
           </div>
         </div>
+      )}
+
+      {/* Summary cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <SummaryCard
+          icon={Award}
+          title="Industry-based certification"
+          count={ibcCount}
+          seniorCount={seniorCount}
+          subtitle="Students with IBC-aligned CTE enrollment"
+          pathwayKey="ibc"
+          activeFilter={pathwayFilter}
+          onFilter={handlePathwayCard}
+          iconBg="bg-teal-600"
+        />
+        <SummaryCard
+          icon={BookOpen}
+          title="College prep course completion"
+          count={collegePrepCount}
+          seniorCount={seniorCount}
+          subtitle="Enrolled in college prep ELA or Math"
+          pathwayKey="college_prep"
+          activeFilter={pathwayFilter}
+          onFilter={handlePathwayCard}
+          iconBg="bg-primary-500"
+        />
+        <SummaryCard
+          icon={Clock}
+          title="TSI assessment"
+          count={tsiCount}
+          seniorCount={seniorCount}
+          subtitle="Seniors who haven't attempted the TSIA"
+          pathwayKey="tsi"
+          activeFilter={pathwayFilter}
+          onFilter={handlePathwayCard}
+          iconBg="bg-warning-dark"
+        />
       </div>
 
-      {/* Pathway 1: IBC */}
-      <IBCPathwayCard />
+      {/* Filter bar */}
+      <FilterBar campuses={campuses} filters={filters} onChange={handleFilterChange} />
 
-      {/* Pathway 2: College Prep */}
-      <CollegePrepPathwayCard />
-
-      {/* Pathway 3: TSI */}
-      <TSIPathwayCard />
-
-      {/* Intervention Tracking */}
-      <InterventionTrackingCard />
+      {/* Table */}
+      <div className={cn("transition-opacity duration-150", isPending && "opacity-50")}>
+        <InterventionsTable rows={filteredRows} onMarkComplete={handleMarkComplete} />
+      </div>
     </div>
   );
 };

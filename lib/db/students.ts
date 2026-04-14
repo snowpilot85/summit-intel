@@ -53,6 +53,20 @@ export async function getStudents(
   return { data: data ?? [], count: count ?? 0 }
 }
 
+export async function getStudentsByIds(
+  client: TypedSupabaseClient,
+  studentIds: string[]
+): Promise<StudentRow[]> {
+  if (studentIds.length === 0) return []
+  const { data, error } = await client
+    .from('students')
+    .select('*')
+    .in('id', studentIds)
+    .order('last_name', { ascending: true })
+  if (error) throw error
+  return data ?? []
+}
+
 export async function getStudentById(
   client: TypedSupabaseClient,
   studentId: string

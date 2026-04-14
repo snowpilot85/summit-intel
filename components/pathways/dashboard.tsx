@@ -174,13 +174,11 @@ function mapCampuses(
 function mapSnapshots(
   rows: SnapshotRow[],
   subgroup: SubgroupFilter,
-  currentYear: number
 ): YearTrendData[] {
   return rows.map((row) => {
-    const isProjection = row.graduation_year >= currentYear;
     const base = {
       year: `Class of ${row.graduation_year}`,
-      isProjection,
+      isProjection: false,
       vsDistrict: "—",
     };
 
@@ -739,13 +737,34 @@ export const PathwaysDashboard = ({
   const indicatorData = mapIndicators(indicators);
   const campusData = mapCampuses(campusSummaries, subgroup);
 
-  // Determine current graduation year for projection flag (most recent snapshot year)
-  const currentGradYear = React.useMemo(() => {
-    if (snapshots.length === 0) return new Date().getFullYear();
-    return Math.max(...snapshots.map((s) => s.graduation_year));
-  }, [snapshots]);
+  // Current graduating class is always the in-progress senior cohort (school year 2025-26 → Class of 2026)
+  const CURRENT_GRAD_YEAR = 2026;
 
-  const yearTrendData = mapSnapshots(snapshots, subgroup, currentGradYear);
+  const yearTrendData = React.useMemo(() => {
+    const historical = mapSnapshots(snapshots, subgroup);
+
+    // Build the Class of 2026 projected row from live senior data in summary
+    const projectedRate = summary.ccmrPercent;
+    const overallRate = allStudentsCcmrPercent.current;
+    const gap = projectedRate - overallRate;
+    const vsDistrict =
+      subgroup !== "all"
+        ? gap > 0
+          ? `+${gap}%`
+          : `${gap}%`
+        : "—";
+
+    const projectedRow: YearTrendData = {
+      year: `Class of ${CURRENT_GRAD_YEAR}`,
+      isProjection: true,
+      grads: summary.seniors,
+      ccmrMet: summary.ccmrMet,
+      rate: projectedRate,
+      vsDistrict,
+    };
+
+    return [...historical, projectedRow];
+  }, [snapshots, subgroup, summary]);
 
   // Comparison banner for subgroups
   const comparisonBanner = React.useMemo(() => {

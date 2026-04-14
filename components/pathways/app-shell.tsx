@@ -294,7 +294,7 @@ const pathwaysNavItems = [
   { id: "interventions", label: "Interventions", icon: Target, href: "/pathways/interventions" },
   { id: "campus-reports", label: "Campus Reports", icon: Building2, href: "/pathways/campus-reports" },
   { id: "simulator", label: "A-F Simulator", icon: Gauge, href: "/pathways/simulator" },
-  { id: "data-upload", label: "Data Upload", icon: Upload, href: "/pathways/upload" },
+  { id: "data-upload", label: "Data Upload", icon: Upload, href: "/pathways/data-upload" },
   { id: "settings", label: "Settings", icon: Settings, href: "/pathways/settings" },
 ];
 

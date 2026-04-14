@@ -6,149 +6,175 @@ import Link from "next/link";
 import {
   ChevronDown,
   TrendingUp,
-  TrendingDown,
-  Download,
-  Printer,
-  Mail,
-  ChevronLeft,
-  ChevronRight,
-  User,
+  AlertTriangle,
+  FileText,
+  Building2,
+  Users,
+  CheckCircle2,
+  AlertCircle,
+  ArrowRight,
+  Gauge,
 } from "lucide-react";
+import { fetchCampusDetail } from "@/app/pathways/campus-reports/actions";
+import type {
+  CampusCCMRSummaryRow,
+  CampusRow,
+  InterventionRow,
+  SnapshotRow,
+} from "@/types/database";
 
 /* ============================================
-   Campus Reports Page
-   Drill-down view for each high school
+   Campus Reports — Principal's View
    ============================================ */
 
 // ============================================
-// TYPES
+// HELPERS
 // ============================================
 
-interface Campus {
-  id: string;
-  name: string;
-  principal: string;
-  totalStudents: number;
-  seniors: number;
-  ccmrMet: number;
-  ccmrRate: number;
-  atRiskSeniors: number;
-  trend: number;
+function pct(n: number): string {
+  return `${Math.round(n)}%`;
 }
 
-interface SubgroupData {
-  group: string;
-  seniors: number;
-  ccmrMet: number;
-  rate: number;
-  gap: number;
+function ebPct(summary: CampusCCMRSummaryRow): number {
+  return summary.total_seniors > 0
+    ? Math.round((summary.eb_total / summary.total_seniors) * 100)
+    : 0;
 }
 
-interface AtRiskStudent {
-  id: string;
-  name: string;
-  indicators: string[];
-  nearestPathway: string;
-  pathwayAction: string;
+const PATHWAY_LABELS: Record<string, string> = {
+  ibc: "Industry-based certification (IBC)",
+  tsi_reading: "TSI Assessment",
+  tsi_math: "TSI Assessment",
+  tsi: "TSI Assessment",
+  college_prep_ela: "College Prep ELA",
+  college_prep_math: "College Prep Math",
+  college_prep: "College Prep course",
+};
+
+function pathwayLabel(pt: string | null): string {
+  return pt ? (PATHWAY_LABELS[pt] ?? pt) : "Other";
 }
 
 // ============================================
-// MOCK DATA
+// CCMR RATE BADGE
 // ============================================
 
-const campuses: Campus[] = [
-  { id: "economedes", name: "Economedes H S", principal: "Dr. Carlos Mendez", totalStudents: 1654, seniors: 312, ccmrMet: 234, ccmrRate: 75, atRiskSeniors: 78, trend: 3 },
-  { id: "edinburg-north", name: "Edinburg North H S", principal: "Dr. Maria Gonzalez", totalStudents: 1842, seniors: 342, ccmrMet: 246, ccmrRate: 72, atRiskSeniors: 96, trend: 2 },
-  { id: "vela", name: "Vela H S", principal: "Dr. Roberto Santos", totalStudents: 1523, seniors: 261, ccmrMet: 180, ccmrRate: 69, atRiskSeniors: 81, trend: -1 },
-  { id: "edinburg", name: "Edinburg H S", principal: "Dr. Ana Rodriguez", totalStudents: 1712, seniors: 288, ccmrMet: 184, ccmrRate: 64, atRiskSeniors: 104, trend: 1 },
-];
-
-const indicatorData = [
-  { indicator: "IBC", count: 89, percent: 26 },
-  { indicator: "Dual credit", count: 78, percent: 23 },
-  { indicator: "TSI", count: 52, percent: 15 },
-  { indicator: "College prep", count: 41, percent: 12 },
-  { indicator: "AP/IB 3+", count: 38, percent: 11 },
-  { indicator: "SAT/ACT", count: 29, percent: 8 },
-];
-
-const subgroupData: SubgroupData[] = [
-  { group: "All students", seniors: 342, ccmrMet: 246, rate: 72, gap: 0 },
-  { group: "EB students", seniors: 144, ccmrMet: 87, rate: 60, gap: -12 },
-  { group: "Econ disadvantaged", seniors: 198, ccmrMet: 129, rate: 65, gap: -7 },
-  { group: "Special education", seniors: 38, ccmrMet: 19, rate: 50, gap: -22 },
-  { group: "Male", seniors: 178, ccmrMet: 124, rate: 70, gap: -2 },
-  { group: "Female", seniors: 164, ccmrMet: 122, rate: 74, gap: 2 },
-];
-
-const atRiskStudents: AtRiskStudent[] = [
-  { id: "201502", name: "Luis Hernandez", indicators: [], nearestPathway: "IBC", pathwayAction: "Register for AWS exam" },
-  { id: "201567", name: "Maria Santos", indicators: [], nearestPathway: "IBC", pathwayAction: "Register for CNA exam" },
-  { id: "201890", name: "Carlos Vega", indicators: [], nearestPathway: "TSI", pathwayAction: "Schedule TSIA" },
-  { id: "201445", name: "Diana Torres", indicators: [], nearestPathway: "College Prep", pathwayAction: "Monitor grade (67%)" },
-  { id: "201334", name: "Roberto Cruz", indicators: [], nearestPathway: "IBC", pathwayAction: "Confirm exam registration" },
-  { id: "201556", name: "Ana Garcia", indicators: [], nearestPathway: "TSI", pathwayAction: "Schedule TSIA" },
-  { id: "201623", name: "Jose Martinez", indicators: [], nearestPathway: "Dual Credit", pathwayAction: "Complete final exam" },
-  { id: "201789", name: "Elena Ruiz", indicators: [], nearestPathway: "IBC", pathwayAction: "Register for ServSafe" },
-];
+const RateBadge = ({ rate }: { rate: number }) => {
+  const rounded = Math.round(rate);
+  const className =
+    rounded >= 70
+      ? "bg-teal-100 text-teal-700"
+      : rounded >= 60
+      ? "bg-amber-100 text-amber-700"
+      : "bg-error-light text-error-dark";
+  return (
+    <span className={cn("px-2.5 py-1 rounded-full text-[12px] font-semibold", className)}>
+      {rounded}%
+    </span>
+  );
+};
 
 // ============================================
 // CAMPUS SELECTOR
 // ============================================
 
 interface CampusSelectorProps {
-  selectedCampus: Campus;
-  onCampusChange: (campus: Campus) => void;
+  campuses: CampusRow[];
+  selectedId: string | null;
+  summaries: CampusCCMRSummaryRow[];
+  onChange: (id: string | null) => void;
 }
 
-const CampusSelector = ({ selectedCampus, onCampusChange }: CampusSelectorProps) => {
-  const [isOpen, setIsOpen] = React.useState(false);
+const CampusSelector = ({
+  campuses,
+  selectedId,
+  summaries,
+  onChange,
+}: CampusSelectorProps) => {
+  const [open, setOpen] = React.useState(false);
+  const summaryById = new Map(summaries.map((s) => [s.campus_id, s]));
+  const selected = selectedId ? campuses.find((c) => c.id === selectedId) : null;
+  const selectedSummary = selectedId ? summaryById.get(selectedId) : null;
 
   return (
     <div className="relative">
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => setOpen((o) => !o)}
         className="w-full flex items-center justify-between gap-4 p-4 bg-neutral-0 border border-neutral-200 rounded-lg hover:bg-neutral-50 transition-colors"
       >
         <div className="text-left">
-          <p className="text-[11px] text-neutral-500 uppercase tracking-wider mb-1">Select a campus</p>
-          <p className="text-[16px] font-semibold text-neutral-900">{selectedCampus.name}</p>
-          <p className="text-[13px] text-neutral-600">
-            {selectedCampus.seniors} seniors, {selectedCampus.ccmrRate}% CCMR
+          <p className="text-[11px] text-neutral-500 uppercase tracking-wider mb-1">
+            Viewing campus
           </p>
+          <p className="text-[16px] font-semibold text-neutral-900">
+            {selected?.name ?? "All campuses — district overview"}
+          </p>
+          {selectedSummary && (
+            <p className="text-[13px] text-neutral-600">
+              {selectedSummary.total_seniors} seniors ·{" "}
+              {Math.round(selectedSummary.ccmr_rate)}% CCMR ·{" "}
+              {selectedSummary.at_risk} at risk
+            </p>
+          )}
         </div>
-        <ChevronDown className={cn("w-5 h-5 text-neutral-500 transition-transform", isOpen && "rotate-180")} />
+        <ChevronDown
+          className={cn(
+            "w-5 h-5 text-neutral-400 transition-transform flex-shrink-0",
+            open && "rotate-180"
+          )}
+        />
       </button>
 
-      {isOpen && (
-        <div className="absolute top-full left-0 right-0 mt-2 bg-neutral-0 border border-neutral-200 rounded-lg shadow-lg z-50">
-          {campuses.map((campus) => (
-            <button
-              key={campus.id}
-              onClick={() => {
-                onCampusChange(campus);
-                setIsOpen(false);
-              }}
-              className={cn(
-                "w-full flex items-center justify-between p-4 hover:bg-neutral-50 transition-colors border-b border-neutral-100 last:border-0 first:rounded-t-lg last:rounded-b-lg",
-                selectedCampus.id === campus.id && "bg-teal-50"
-              )}
-            >
-              <div className="text-left">
-                <p className="text-[14px] font-medium text-neutral-900">{campus.name}</p>
-                <p className="text-[12px] text-neutral-500">
-                  {campus.seniors} seniors, {campus.ccmrRate}% CCMR
-                </p>
-              </div>
-              <span className={cn(
-                "text-[13px] font-semibold flex items-center gap-1",
-                campus.trend > 0 ? "text-teal-600" : campus.trend < 0 ? "text-error" : "text-neutral-500"
-              )}>
-                {campus.trend > 0 ? <TrendingUp className="w-4 h-4" /> : campus.trend < 0 ? <TrendingDown className="w-4 h-4" /> : null}
-                {campus.trend > 0 ? "+" : ""}{campus.trend}%
-              </span>
-            </button>
-          ))}
+      {open && (
+        <div className="absolute top-full left-0 right-0 mt-2 bg-neutral-0 border border-neutral-200 rounded-lg shadow-lg z-50 overflow-hidden">
+          {/* All campuses option */}
+          <button
+            onClick={() => {
+              onChange(null);
+              setOpen(false);
+            }}
+            className={cn(
+              "w-full flex items-center gap-3 px-4 py-3 hover:bg-neutral-50 border-b border-neutral-100 transition-colors text-left",
+              !selectedId && "bg-teal-50"
+            )}
+          >
+            <Building2 className="w-4 h-4 text-neutral-400 flex-shrink-0" />
+            <div>
+              <p className="text-[14px] font-medium text-neutral-900">
+                All campuses — district overview
+              </p>
+              <p className="text-[12px] text-neutral-500">
+                Compare all campuses side by side
+              </p>
+            </div>
+          </button>
+
+          {campuses.map((campus) => {
+            const s = summaryById.get(campus.id);
+            return (
+              <button
+                key={campus.id}
+                onClick={() => {
+                  onChange(campus.id);
+                  setOpen(false);
+                }}
+                className={cn(
+                  "w-full flex items-center justify-between px-4 py-3 hover:bg-neutral-50 border-b border-neutral-100 last:border-0 transition-colors",
+                  selectedId === campus.id && "bg-teal-50"
+                )}
+              >
+                <div className="text-left">
+                  <p className="text-[14px] font-medium text-neutral-900">{campus.name}</p>
+                  {s && (
+                    <p className="text-[12px] text-neutral-500">
+                      {s.total_seniors} seniors · {s.at_risk} at risk
+                    </p>
+                  )}
+                </div>
+                {s && <RateBadge rate={s.ccmr_rate} />}
+              </button>
+            );
+          })}
         </div>
       )}
     </div>
@@ -156,497 +182,728 @@ const CampusSelector = ({ selectedCampus, onCampusChange }: CampusSelectorProps)
 };
 
 // ============================================
-// CAMPUS HEADER CARD
+// ALL-CAMPUSES COMPARISON TABLE
 // ============================================
 
-interface CampusHeaderProps {
-  campus: Campus;
-}
+const ComparisonTable = ({
+  summaries,
+  onSelectCampus,
+}: {
+  summaries: CampusCCMRSummaryRow[];
+  onSelectCampus: (id: string) => void;
+}) => {
+  const sorted = [...summaries].sort((a, b) => b.ccmr_rate - a.ccmr_rate);
 
-const CampusHeaderCard = ({ campus }: CampusHeaderProps) => {
   return (
-    <div className="bg-neutral-0 border border-neutral-200 rounded-lg p-6">
-      <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
-        <div>
-          <h2 className="text-[22px] font-bold text-neutral-900">{campus.name}</h2>
-          <p className="text-[14px] text-neutral-600 flex items-center gap-2 mt-1">
-            <User className="w-4 h-4" />
-            Principal: {campus.principal}
-          </p>
-        </div>
-        <span className={cn(
-          "px-3 py-1.5 rounded-full text-[13px] font-semibold flex items-center gap-1",
-          campus.trend > 0 ? "bg-teal-100 text-teal-700" : campus.trend < 0 ? "bg-error-light text-error-dark" : "bg-neutral-100 text-neutral-600"
-        )}>
-          {campus.trend > 0 ? <TrendingUp className="w-4 h-4" /> : campus.trend < 0 ? <TrendingDown className="w-4 h-4" /> : null}
-          {campus.trend > 0 ? "+" : ""}{campus.trend}% vs. last year
-        </span>
+    <div className="bg-neutral-0 border border-neutral-200 rounded-lg overflow-hidden">
+      <div className="px-6 py-4 border-b border-neutral-200">
+        <h2 className="text-[17px] font-semibold text-neutral-900">Campus comparison</h2>
+        <p className="text-[13px] text-neutral-500 mt-0.5">
+          Current school year · Grade 12 seniors · Click a row to drill in
+        </p>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        <div className="p-4 bg-neutral-50 rounded-lg">
-          <p className="text-[12px] text-neutral-500 mb-1">Total 9-12</p>
-          <p className="text-[20px] font-bold text-neutral-900">{campus.totalStudents.toLocaleString()}</p>
-        </div>
-        <div className="p-4 bg-neutral-50 rounded-lg">
-          <p className="text-[12px] text-neutral-500 mb-1">Seniors</p>
-          <p className="text-[20px] font-bold text-neutral-900">{campus.seniors}</p>
-        </div>
-        <div className="p-4 bg-neutral-50 rounded-lg">
-          <p className="text-[12px] text-neutral-500 mb-1">CCMR met</p>
-          <p className="text-[20px] font-bold text-teal-600">{campus.ccmrMet} ({campus.ccmrRate}%)</p>
-        </div>
-        <div className="p-4 bg-neutral-50 rounded-lg">
-          <p className="text-[12px] text-neutral-500 mb-1">At risk seniors</p>
-          <p className="text-[20px] font-bold text-error">{campus.atRiskSeniors}</p>
-        </div>
-        <div className="p-4 bg-neutral-50 rounded-lg">
-          <p className="text-[12px] text-neutral-500 mb-1">Trend</p>
-          <p className={cn(
-            "text-[20px] font-bold flex items-center gap-1",
-            campus.trend > 0 ? "text-teal-600" : campus.trend < 0 ? "text-error" : "text-neutral-600"
-          )}>
-            {campus.trend > 0 ? <TrendingUp className="w-5 h-5" /> : campus.trend < 0 ? <TrendingDown className="w-5 h-5" /> : null}
-            {campus.trend > 0 ? "+" : ""}{campus.trend}%
-          </p>
-        </div>
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead>
+            <tr className="bg-neutral-50 border-b border-neutral-200">
+              <th className="text-left text-[12px] font-semibold text-neutral-700 px-4 py-3">Campus</th>
+              <th className="text-right text-[12px] font-semibold text-neutral-700 px-4 py-3">Seniors</th>
+              <th className="text-right text-[12px] font-semibold text-neutral-700 px-4 py-3">CCMR met</th>
+              <th className="text-right text-[12px] font-semibold text-neutral-700 px-4 py-3">CCMR rate</th>
+              <th className="text-right text-[12px] font-semibold text-neutral-700 px-4 py-3">% EB</th>
+              <th className="text-right text-[12px] font-semibold text-neutral-700 px-4 py-3">EB rate</th>
+              <th className="text-right text-[12px] font-semibold text-neutral-700 px-4 py-3">At risk</th>
+              <th className="text-right text-[12px] font-semibold text-neutral-700 px-4 py-3">Missing ED forms</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="px-4 py-10 text-center text-[13px] text-neutral-500">
+                  No campus data available for this school year.
+                </td>
+              </tr>
+            ) : (
+              sorted.map((s) => (
+                <tr
+                  key={s.campus_id}
+                  onClick={() => onSelectCampus(s.campus_id)}
+                  className="border-b border-neutral-100 last:border-0 hover:bg-neutral-50 cursor-pointer transition-colors group"
+                >
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[13px] font-medium text-neutral-900 group-hover:text-teal-700">
+                        {s.campus_name}
+                      </span>
+                      <ArrowRight className="w-3.5 h-3.5 text-neutral-300 group-hover:text-teal-500 opacity-0 group-hover:opacity-100 transition-all" />
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-right text-[13px] text-neutral-700">
+                    {s.total_seniors}
+                  </td>
+                  <td className="px-4 py-3 text-right text-[13px] text-neutral-700">
+                    {s.ccmr_met}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <RateBadge rate={s.ccmr_rate} />
+                  </td>
+                  <td className="px-4 py-3 text-right text-[13px] text-neutral-600">
+                    {pct(ebPct(s))}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    {s.eb_rate !== null ? (
+                      <span
+                        className={cn(
+                          "text-[13px] font-medium",
+                          s.eb_rate >= 70
+                            ? "text-teal-600"
+                            : s.eb_rate >= 60
+                            ? "text-amber-600"
+                            : "text-error"
+                        )}
+                      >
+                        {Math.round(s.eb_rate)}%
+                      </span>
+                    ) : (
+                      <span className="text-neutral-400 text-[13px]">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <span
+                      className={cn(
+                        "text-[13px] font-medium",
+                        s.at_risk > 20 ? "text-error" : s.at_risk > 10 ? "text-amber-600" : "text-neutral-700"
+                      )}
+                    >
+                      {s.at_risk}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    {s.missing_ed_forms > 0 ? (
+                      <span className="text-[13px] font-medium text-warning-dark">
+                        {s.missing_ed_forms}
+                      </span>
+                    ) : (
+                      <span className="text-[13px] text-teal-600 font-medium">✓ Complete</span>
+                    )}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );
 };
 
 // ============================================
-// CCMR BY INDICATOR SECTION
+// SINGLE CAMPUS — SUMMARY CARDS
 // ============================================
 
-const CCMRByIndicatorSection = () => {
-  const maxCount = Math.max(...indicatorData.map(d => d.count));
+const StatCard = ({
+  label,
+  value,
+  sub,
+  valueClass,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  valueClass?: string;
+}) => (
+  <div className="p-4 bg-neutral-50 rounded-lg">
+    <p className="text-[12px] text-neutral-500 mb-1">{label}</p>
+    <p className={cn("text-[22px] font-bold text-neutral-900", valueClass)}>{value}</p>
+    {sub && <p className="text-[12px] text-neutral-500 mt-0.5">{sub}</p>}
+  </div>
+);
+
+const CampusSummaryCards = ({ summary }: { summary: CampusCCMRSummaryRow }) => {
+  const rate = Math.round(summary.ccmr_rate);
+  const ebRate = summary.eb_rate !== null ? Math.round(summary.eb_rate) : null;
+  const econRate =
+    summary.econ_total > 0
+      ? Math.round((summary.econ_met / summary.econ_total) * 100)
+      : null;
 
   return (
-    <div className="bg-neutral-0 border border-neutral-200 rounded-lg p-6">
-      <h3 className="text-[16px] font-semibold text-neutral-900 mb-4">CCMR by indicator (this campus)</h3>
-      <div className="space-y-3">
-        {indicatorData.map((item, idx) => (
-          <div key={idx} className="flex items-center gap-4">
-            <div className="w-24 text-[13px] text-neutral-700 flex-shrink-0">{item.indicator}</div>
-            <div className="flex-1 h-6 bg-neutral-100 rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-teal-500 rounded-full flex items-center justify-end pr-2"
-                style={{ width: `${(item.count / maxCount) * 100}%` }}
-              >
-                <span className="text-[11px] font-semibold text-neutral-0">{item.count}</span>
-              </div>
-            </div>
-            <div className="w-12 text-right text-[13px] font-medium text-neutral-600 flex-shrink-0">
-              {item.percent}%
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+      <StatCard label="Seniors" value={String(summary.total_seniors)} />
+      <StatCard
+        label="CCMR met"
+        value={`${summary.ccmr_met}`}
+        sub={`${rate}% rate`}
+        valueClass={rate >= 70 ? "text-teal-600" : rate >= 60 ? "text-amber-600" : "text-error"}
+      />
+      <StatCard
+        label="At risk"
+        value={String(summary.at_risk)}
+        sub="no indicator met"
+        valueClass={summary.at_risk > 20 ? "text-error" : "text-neutral-900"}
+      />
+      <StatCard
+        label="Almost"
+        value={String(summary.almost)}
+        sub="1 indicator close"
+        valueClass="text-amber-600"
+      />
+      {ebRate !== null ? (
+        <StatCard
+          label="EB CCMR rate"
+          value={`${ebRate}%`}
+          sub={`${summary.eb_total} EB seniors`}
+          valueClass={ebRate >= 70 ? "text-teal-600" : ebRate >= 60 ? "text-amber-600" : "text-error"}
+        />
+      ) : (
+        <StatCard label="EB seniors" value={String(summary.eb_total)} sub="no rate data" />
+      )}
+      <StatCard
+        label="Missing ED forms"
+        value={String(summary.missing_ed_forms)}
+        sub={`of ${summary.econ_total} econ disadv`}
+        valueClass={summary.missing_ed_forms > 0 ? "text-warning-dark" : "text-teal-600"}
+      />
+    </div>
+  );
+};
+
+// ============================================
+// INTERVENTION ACTION PLAN
+// ============================================
+
+interface ActionItem {
+  pathway: string;
+  count: number;
+  currentRate: number;
+  projectedRate: number;
+  delta: number;
+}
+
+function buildActionPlan(
+  interventions: InterventionRow[],
+  summary: CampusCCMRSummaryRow
+): ActionItem[] {
+  if (interventions.length === 0) return [];
+
+  // Deduplicate by student_id per pathway_type
+  const byPathway = new Map<string, Set<string>>();
+  for (const i of interventions) {
+    const key = i.pathway_type ?? "other";
+    if (!byPathway.has(key)) byPathway.set(key, new Set());
+    byPathway.get(key)!.add(i.student_id);
+  }
+
+  const seniors = summary.total_seniors;
+  const currentMet = summary.ccmr_met;
+  const currentRate = Math.round(summary.ccmr_rate);
+
+  return Array.from(byPathway.entries())
+    .map(([pathway, studentSet]) => {
+      const count = studentSet.size;
+      const projectedMet = currentMet + count;
+      const projectedRate =
+        seniors > 0 ? Math.round((projectedMet / seniors) * 100) : currentRate;
+      return {
+        pathway,
+        count,
+        currentRate,
+        projectedRate,
+        delta: projectedRate - currentRate,
+      };
+    })
+    .filter((a) => a.delta > 0)
+    .sort((a, b) => b.delta - a.delta)
+    .slice(0, 3);
+}
+
+const InterventionActionPlan = ({
+  interventions,
+  summary,
+  campusName,
+}: {
+  interventions: InterventionRow[];
+  summary: CampusCCMRSummaryRow;
+  campusName: string;
+}) => {
+  const items = buildActionPlan(interventions, summary);
+
+  if (items.length === 0) {
+    return (
+      <div className="bg-neutral-0 border border-neutral-200 rounded-lg p-6">
+        <h2 className="text-[17px] font-semibold text-neutral-900 mb-3">
+          Intervention action plan
+        </h2>
+        <p className="text-[13px] text-neutral-500">
+          No active interventions recorded for this campus.{" "}
+          <Link href="/pathways/interventions" className="text-primary-500 hover:underline">
+            View all interventions
+          </Link>
+        </p>
+      </div>
+    );
+  }
+
+  const bestCase = Math.round(summary.ccmr_rate) + items.reduce((s, i) => s + i.delta, 0);
+
+  return (
+    <div className="bg-neutral-0 border border-neutral-200 rounded-lg overflow-hidden">
+      <div className="p-6 border-b border-teal-100 bg-teal-50">
+        <h2 className="text-[17px] font-semibold text-neutral-900">
+          {campusName} — intervention action plan
+        </h2>
+        <p className="text-[13px] text-neutral-600 mt-1">
+          Top {items.length} pathways ranked by projected CCMR impact
+        </p>
+      </div>
+      <div className="p-6 space-y-4">
+        {items.map((item, idx) => (
+          <div key={item.pathway} className="flex gap-4 p-4 bg-neutral-50 rounded-lg">
+            <span className="w-7 h-7 flex-shrink-0 bg-teal-600 text-neutral-0 text-[13px] font-bold rounded-full flex items-center justify-center mt-0.5">
+              {idx + 1}
+            </span>
+            <div>
+              <p className="text-[14px] font-medium text-neutral-900">
+                Get {item.count} student{item.count !== 1 ? "s" : ""} to pass{" "}
+                {pathwayLabel(item.pathway)} before graduation
+              </p>
+              <p className="text-[13px] text-teal-700 mt-1 font-medium">
+                Campus CCMR: {item.currentRate}% → {item.projectedRate}%{" "}
+                <span className="text-[12px] font-normal text-teal-600">
+                  (+{item.delta} points if all succeed)
+                </span>
+              </p>
             </div>
           </div>
         ))}
+
+        <div className="mt-2 p-4 bg-teal-50 border border-teal-200 rounded-lg">
+          <p className="text-[13px] font-semibold text-teal-800">
+            If all {items.length} actions succeed, {campusName} CCMR could reach{" "}
+            <span className="text-teal-700">{Math.min(bestCase, 100)}%</span> (up from{" "}
+            {Math.round(summary.ccmr_rate)}%).
+          </p>
+        </div>
       </div>
     </div>
   );
 };
 
 // ============================================
-// SUBGROUP COMPARISON SECTION
+// ED FORM TRACKING
 // ============================================
 
-const SubgroupComparisonSection = () => {
+const EDFormTrackingCard = ({ summary }: { summary: CampusCCMRSummaryRow }) => {
+  const total = summary.econ_total;
+  const missing = summary.missing_ed_forms;
+  const collected = total - missing;
+  const collectedPct = total > 0 ? Math.round((collected / total) * 100) : 100;
+
   return (
     <div className="bg-neutral-0 border border-neutral-200 rounded-lg overflow-hidden">
       <div className="p-6 border-b border-neutral-200">
-        <h3 className="text-[16px] font-semibold text-neutral-900">Subgroup comparison</h3>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr className="bg-neutral-50 border-b border-neutral-200">
-              <th className="px-4 py-3 text-left text-[12px] font-semibold text-neutral-700">Student group</th>
-              <th className="px-4 py-3 text-right text-[12px] font-semibold text-neutral-700">Seniors</th>
-              <th className="px-4 py-3 text-right text-[12px] font-semibold text-neutral-700">CCMR met</th>
-              <th className="px-4 py-3 text-right text-[12px] font-semibold text-neutral-700">Rate</th>
-              <th className="px-4 py-3 text-right text-[12px] font-semibold text-neutral-700">Gap vs. campus avg</th>
-            </tr>
-          </thead>
-          <tbody>
-            {subgroupData.map((row, idx) => (
-              <tr key={idx} className="border-b border-neutral-100 last:border-0">
-                <td className="px-4 py-3 text-[13px] font-medium text-neutral-900">{row.group}</td>
-                <td className="px-4 py-3 text-[13px] text-neutral-700 text-right">{row.seniors}</td>
-                <td className="px-4 py-3 text-[13px] text-neutral-700 text-right">{row.ccmrMet}</td>
-                <td className="px-4 py-3 text-right">
-                  <span className={cn(
-                    "text-[13px] font-semibold",
-                    row.rate >= 72 ? "text-teal-600" : row.rate >= 65 ? "text-warning-dark" : "text-error"
-                  )}>
-                    {row.rate}%
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-right">
-                  {row.gap === 0 ? (
-                    <span className="text-[13px] text-neutral-400">—</span>
-                  ) : (
-                    <span className={cn(
-                      "text-[13px] font-semibold",
-                      Math.abs(row.gap) > 10 ? "text-error" : Math.abs(row.gap) > 5 ? "text-warning-dark" : row.gap > 0 ? "text-teal-600" : "text-neutral-600"
-                    )}>
-                      {row.gap > 0 ? "+" : ""}{row.gap}%
-                    </span>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-};
-
-// ============================================
-// ED DOCUMENTATION SECTION
-// ============================================
-
-import { AlertTriangle, FileText } from "lucide-react";
-
-const EDDocumentationSection = () => {
-  const currentFormsCollected = 1247;
-  const totalStudents = 1842;
-  const currentPercent = 67.7;
-  const estimatedFullPercent = 81.2;
-  const missingForms = totalStudents - currentFormsCollected;
-  
-  return (
-    <div className="bg-neutral-0 border border-neutral-200 rounded-lg overflow-hidden">
-      <div className="p-6 border-b border-neutral-200">
-        <h3 className="text-[16px] font-semibold text-neutral-900">Economically disadvantaged documentation</h3>
-        <p className="text-[13px] text-neutral-600 mt-1">
+        <h2 className="text-[17px] font-semibold text-neutral-900">
+          Economically disadvantaged documentation
+        </h2>
+        <p className="text-[13px] text-neutral-500 mt-1">
           ED form collection — hidden accountability lever
         </p>
-        <p className="text-[12px] text-neutral-500 mt-0.5">
-          Your documented ED% determines which scoring bracket TEA uses. Under-documenting ED students means you&apos;re graded against a harder standard.
+        <p className="text-[12px] text-neutral-400 mt-0.5">
+          Your documented ED% determines which scoring bracket TEA uses. Under-documenting means
+          you&apos;re graded against a harder standard.
         </p>
       </div>
-      
-      {/* Comparison Table */}
+
       <div className="p-6 border-b border-neutral-200">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-neutral-200">
-                <th className="py-3 text-left text-[12px] font-semibold text-neutral-700">Metric</th>
-                <th className="py-3 text-right text-[12px] font-semibold text-neutral-700">Current</th>
-                <th className="py-3 text-right text-[12px] font-semibold text-teal-600">If fully documented</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="border-b border-neutral-100">
-                <td className="py-3 text-[13px] text-neutral-700">ED forms collected</td>
-                <td className="py-3 text-[13px] text-neutral-900 text-right font-medium">
-                  {currentFormsCollected.toLocaleString()} / {totalStudents.toLocaleString()} ({currentPercent}%)
-                </td>
-                <td className="py-3 text-[13px] text-teal-600 text-right font-medium">
-                  {totalStudents.toLocaleString()} / {totalStudents.toLocaleString()} (100%)
-                </td>
-              </tr>
-              <tr className="border-b border-neutral-100">
-                <td className="py-3 text-[13px] text-neutral-700">Documented ED%</td>
-                <td className="py-3 text-[13px] text-neutral-900 text-right font-medium">67.9%</td>
-                <td className="py-3 text-[13px] text-teal-600 text-right font-medium">Est. 81.2%</td>
-              </tr>
-              <tr className="border-b border-neutral-100">
-                <td className="py-3 text-[13px] text-neutral-700">CCMR cut score for B</td>
-                <td className="py-3 text-[13px] text-neutral-900 text-right font-medium">75</td>
-                <td className="py-3 text-[13px] text-teal-600 text-right font-medium">58</td>
-              </tr>
-              <tr className="border-b border-neutral-100">
-                <td className="py-3 text-[13px] text-neutral-700">Your CCMR raw score</td>
-                <td className="py-3 text-[13px] text-neutral-900 text-right font-medium">72</td>
-                <td className="py-3 text-[13px] text-neutral-600 text-right">72 (unchanged)</td>
-              </tr>
-              <tr className="border-b border-neutral-100">
-                <td className="py-3 text-[13px] text-neutral-700">CCMR scaled score</td>
-                <td className="py-3 text-[13px] text-neutral-900 text-right font-medium">82 (B)</td>
-                <td className="py-3 text-[13px] text-teal-600 text-right font-semibold">89 (B+)</td>
-              </tr>
-              <tr className="bg-teal-50">
-                <td className="py-3 text-[13px] font-semibold text-neutral-900">Impact on overall</td>
-                <td className="py-3 text-[13px] text-neutral-400 text-right">—</td>
-                <td className="py-3 text-[13px] text-teal-700 text-right font-bold">+4 points toward A</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-      
-      {/* Progress Bar */}
-      <div className="p-6 border-b border-neutral-200">
+        {/* Progress bar */}
         <div className="flex items-center justify-between mb-2">
           <span className="text-[13px] font-medium text-neutral-700">Form collection progress</span>
-          <span className="text-[13px] font-semibold text-neutral-900">{currentPercent}%</span>
+          <span className="text-[13px] font-semibold text-neutral-900">{collectedPct}%</span>
         </div>
-        <div className="h-4 bg-neutral-100 rounded-full overflow-hidden flex">
-          <div 
-            className="h-full bg-teal-500 rounded-l-full"
-            style={{ width: `${currentPercent}%` }}
-          />
-          <div 
-            className="h-full bg-warning/40"
-            style={{ width: `${100 - currentPercent}%` }}
+        <div className="h-4 bg-neutral-100 rounded-full overflow-hidden">
+          <div
+            className={cn(
+              "h-full rounded-full transition-all",
+              collectedPct === 100 ? "bg-teal-500" : "bg-teal-500"
+            )}
+            style={{ width: `${collectedPct}%` }}
           />
         </div>
         <div className="flex items-center justify-between mt-2">
-          <span className="text-[11px] text-teal-600">{currentFormsCollected.toLocaleString()} collected</span>
-          <span className="text-[11px] text-warning-dark">{missingForms} missing</span>
+          <span className="text-[11px] text-teal-600">
+            {collected.toLocaleString()} collected
+          </span>
+          {missing > 0 && (
+            <span className="text-[11px] text-warning-dark">
+              {missing.toLocaleString()} missing
+            </span>
+          )}
         </div>
-      </div>
-      
-      {/* Callout */}
-      <div className="p-6 border-b border-neutral-200 bg-warning-light">
-        <div className="flex gap-3">
-          <AlertTriangle className="w-5 h-5 text-warning-dark flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-[14px] font-semibold text-warning-dark">
-              {missingForms} students are missing ED documentation.
+
+        {/* Stats */}
+        <div className="grid grid-cols-3 gap-4 mt-5">
+          <div className="text-center">
+            <p className="text-[20px] font-bold text-neutral-900">{total}</p>
+            <p className="text-[11px] text-neutral-500 mt-0.5">Econ disadvantaged students</p>
+          </div>
+          <div className="text-center">
+            <p className="text-[20px] font-bold text-teal-600">{collected}</p>
+            <p className="text-[11px] text-neutral-500 mt-0.5">ED forms collected</p>
+          </div>
+          <div className="text-center">
+            <p className={cn("text-[20px] font-bold", missing > 0 ? "text-warning-dark" : "text-teal-600")}>
+              {missing}
             </p>
-            <p className="text-[13px] text-warning-dark/80 mt-1">
-              If even half qualify as ED, your campus ED% moves from 67.9% to 74.5%, which lowers your CCMR scoring threshold. This costs nothing and could be worth 3-4 accountability points.
-            </p>
+            <p className="text-[11px] text-neutral-500 mt-0.5">Missing forms</p>
           </div>
         </div>
       </div>
-      
-      {/* Action Buttons */}
-      <div className="p-6 flex flex-wrap items-center gap-3">
-        <Link 
-          href="/pathways/students?filter=missing-ed"
-          className="text-[13px] font-medium text-teal-600 hover:text-teal-700"
+
+      {missing > 0 && (
+        <div className="p-5 bg-warning-light flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-warning-dark flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-[13px] font-semibold text-warning-dark">
+              {missing} students are missing ED documentation.
+            </p>
+            <p className="text-[12px] text-warning-dark/80 mt-1">
+              Collecting these forms could raise your documented ED% and lower your CCMR scoring
+              threshold — potentially worth several accountability points at no instructional cost.
+            </p>
+          </div>
+        </div>
+      )}
+
+      <div className="p-5 flex flex-wrap items-center gap-3">
+        <Link
+          href="/pathways/students"
+          className="text-[13px] font-medium text-teal-600 hover:text-teal-700 flex items-center gap-1"
         >
+          <FileText className="w-4 h-4" />
           View students missing ED forms
         </Link>
-        <button className="px-4 py-2 border border-neutral-200 text-neutral-700 text-[13px] font-medium rounded-md hover:bg-neutral-50 transition-colors flex items-center gap-2">
-          <FileText className="w-4 h-4" />
-          Generate ED form collection report
-        </button>
-        <button className="px-4 py-2 border border-neutral-200 text-neutral-700 text-[13px] font-medium rounded-md hover:bg-neutral-50 transition-colors flex items-center gap-2">
-          <Printer className="w-4 h-4" />
-          Print parent form packets
-        </button>
       </div>
     </div>
   );
 };
 
 // ============================================
-// AT-RISK STUDENTS SECTION
+// CAMPUS YoY TREND
 // ============================================
 
-interface AtRiskStudentsSectionProps {
-  atRiskCount: number;
-}
+const CampusYoYTrend = ({ snapshots }: { snapshots: SnapshotRow[] }) => {
+  if (snapshots.length === 0) {
+    return (
+      <div className="bg-neutral-0 border border-neutral-200 rounded-lg p-6">
+        <h2 className="text-[17px] font-semibold text-neutral-900 mb-3">
+          Campus year-over-year trend
+        </h2>
+        <p className="text-[13px] text-neutral-500 flex items-center gap-2">
+          <TrendingUp className="w-4 h-4" />
+          Historical data not yet available for individual campuses.
+        </p>
+      </div>
+    );
+  }
 
-const AtRiskStudentsSection = ({ atRiskCount }: AtRiskStudentsSectionProps) => {
-  const [currentPage, setCurrentPage] = React.useState(1);
-  const itemsPerPage = 5;
-  const totalPages = Math.ceil(atRiskStudents.length / itemsPerPage);
-  const paginatedStudents = atRiskStudents.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  const sorted = [...snapshots].sort((a, b) => a.graduation_year - b.graduation_year);
 
   return (
-    <div className="bg-neutral-0 border border-neutral-200 rounded-lg overflow-hidden">
-      <div className="p-6 border-b border-neutral-200">
-        <h3 className="text-[16px] font-semibold text-neutral-900">At-risk seniors at this campus</h3>
-        <p className="text-[13px] text-neutral-600 mt-1">{atRiskCount} seniors without a CCMR indicator</p>
-      </div>
+    <div className="bg-neutral-0 border border-neutral-200 rounded-lg p-6">
+      <h2 className="text-[17px] font-semibold text-neutral-900 mb-4">
+        Campus year-over-year trend
+      </h2>
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead>
-            <tr className="bg-neutral-50 border-b border-neutral-200">
-              <th className="px-4 py-3 text-left text-[12px] font-semibold text-neutral-700">Student</th>
-              <th className="px-4 py-3 text-left text-[12px] font-semibold text-neutral-700">Nearest pathway</th>
-              <th className="px-4 py-3 text-left text-[12px] font-semibold text-neutral-700">Action needed</th>
+            <tr className="border-b border-neutral-200">
+              <th className="text-left text-[12px] font-semibold text-neutral-700 pb-3">
+                Graduating class
+              </th>
+              <th className="text-right text-[12px] font-semibold text-neutral-700 pb-3">
+                Grads
+              </th>
+              <th className="text-right text-[12px] font-semibold text-neutral-700 pb-3">
+                CCMR met
+              </th>
+              <th className="text-right text-[12px] font-semibold text-neutral-700 pb-3">
+                Rate
+              </th>
+              <th className="text-right text-[12px] font-semibold text-neutral-700 pb-3">
+                EB rate
+              </th>
             </tr>
           </thead>
           <tbody>
-            {paginatedStudents.map((student) => (
-              <tr key={student.id} className="border-b border-neutral-100 last:border-0">
-                <td className="px-4 py-3">
-                  <Link href={`/pathways/students/${student.id}`} className="text-[13px] font-medium text-primary-500 hover:text-primary-600">
-                    {student.name} #{student.id}
-                  </Link>
+            {sorted.map((snap) => (
+              <tr
+                key={snap.graduation_year}
+                className="border-b border-neutral-100 last:border-0"
+              >
+                <td className="py-3 text-[13px] text-neutral-900">
+                  Class of {snap.graduation_year}
                 </td>
-                <td className="px-4 py-3">
-                  <span className="px-2 py-1 bg-primary-100 text-primary-700 text-[12px] font-medium rounded">
-                    {student.nearestPathway}
-                  </span>
+                <td className="py-3 text-right text-[13px] text-neutral-700">
+                  {snap.total_graduates.toLocaleString()}
                 </td>
-                <td className="px-4 py-3 text-[13px] text-neutral-700">{student.pathwayAction}</td>
+                <td className="py-3 text-right text-[13px] text-neutral-700">
+                  {snap.ccmr_met_count.toLocaleString()}
+                </td>
+                <td className="py-3 text-right">
+                  <RateBadge rate={snap.ccmr_rate} />
+                </td>
+                <td className="py-3 text-right text-[13px] text-neutral-700">
+                  {snap.eb_rate !== null ? `${Math.round(snap.eb_rate)}%` : "—"}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      <div className="flex items-center justify-between px-4 py-3 border-t border-neutral-200 bg-neutral-50">
-        <p className="text-[13px] text-neutral-600">
-          Showing {(currentPage - 1) * itemsPerPage + 1}-{Math.min(currentPage * itemsPerPage, atRiskStudents.length)} of {atRiskCount}
-        </p>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-            disabled={currentPage === 1}
-            className="p-1.5 rounded border border-neutral-200 hover:bg-neutral-100 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          <span className="text-[13px] text-neutral-600">Page {currentPage}</span>
-          <button
-            onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-            disabled={currentPage === totalPages}
-            className="p-1.5 rounded border border-neutral-200 hover:bg-neutral-100 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
     </div>
   );
 };
 
 // ============================================
-// CAMPUS ACTION PLAN
+// SINGLE CAMPUS VIEW
 // ============================================
 
-interface CampusActionPlanProps {
-  campus: Campus;
+interface SingleCampusViewProps {
+  summary: CampusCCMRSummaryRow;
+  campusName: string;
+  snapshots: SnapshotRow[];
+  interventions: InterventionRow[];
+  isLoading: boolean;
 }
 
-const CampusActionPlan = ({ campus }: CampusActionPlanProps) => {
-  return (
-    <div className="bg-neutral-0 border border-neutral-200 rounded-lg overflow-hidden">
-      <div className="p-6 border-b border-neutral-200 bg-teal-50">
-        <h3 className="text-[18px] font-bold text-neutral-900">{campus.name} — CCMR Action Plan</h3>
-      </div>
-      <div className="p-6">
-        <p className="text-[14px] font-semibold text-neutral-900 mb-4">Three priority actions:</p>
-        <div className="space-y-4">
-          <div className="flex gap-4 p-4 bg-neutral-50 rounded-lg">
-            <span className="w-7 h-7 flex-shrink-0 bg-teal-500 text-neutral-0 text-[14px] font-bold rounded-full flex items-center justify-center">1</span>
-            <div>
-              <p className="text-[14px] font-medium text-neutral-900">
-                Register 34 CTE students for IBC exams before May 15
-              </p>
-              <p className="text-[13px] text-teal-600 mt-1">Projected impact: +10% CCMR</p>
-            </div>
-          </div>
-          <div className="flex gap-4 p-4 bg-neutral-50 rounded-lg">
-            <span className="w-7 h-7 flex-shrink-0 bg-teal-500 text-neutral-0 text-[14px] font-bold rounded-full flex items-center justify-center">2</span>
-            <div>
-              <p className="text-[14px] font-medium text-neutral-900">
-                Schedule TSIA testing session for 28 untested seniors
-              </p>
-              <p className="text-[13px] text-teal-600 mt-1">Projected impact: +4% (at 50% pass rate)</p>
-            </div>
-          </div>
-          <div className="flex gap-4 p-4 bg-neutral-50 rounded-lg">
-            <span className="w-7 h-7 flex-shrink-0 bg-teal-500 text-neutral-0 text-[14px] font-bold rounded-full flex items-center justify-center">3</span>
-            <div>
-              <p className="text-[14px] font-medium text-neutral-900">
-                Monitor 18 college prep students at risk of failing
-              </p>
-              <p className="text-[13px] text-teal-600 mt-1">Ensure tutoring support through May 23</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-6 p-4 bg-teal-50 border border-teal-200 rounded-lg">
-          <p className="text-[14px] font-semibold text-teal-700">
-            If all three actions succeed, {campus.name} CCMR could reach 82% (up from {campus.ccmrRate}%).
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3 mt-6">
-          <button className="px-4 py-2 border border-neutral-200 text-neutral-700 text-[13px] font-medium rounded-md hover:bg-neutral-50 transition-colors flex items-center gap-2">
-            <Printer className="w-4 h-4" />
-            Print action plan
-          </button>
-          <button className="px-4 py-2 border border-neutral-200 text-neutral-700 text-[13px] font-medium rounded-md hover:bg-neutral-50 transition-colors flex items-center gap-2">
-            <Mail className="w-4 h-4" />
-            Share with principal
-          </button>
-          <button className="px-4 py-2 border border-neutral-200 text-neutral-700 text-[13px] font-medium rounded-md hover:bg-neutral-50 transition-colors flex items-center gap-2">
-            <Download className="w-4 h-4" />
-            Export campus data
-          </button>
-        </div>
+const SingleCampusView = ({
+  summary,
+  campusName,
+  snapshots,
+  interventions,
+  isLoading,
+}: SingleCampusViewProps) => (
+  <div
+    className={cn(
+      "space-y-6 transition-opacity duration-150",
+      isLoading && "opacity-50 pointer-events-none"
+    )}
+  >
+    {/* Campus name heading */}
+    <div className="flex items-center gap-3">
+      <Building2 className="w-6 h-6 text-teal-600" />
+      <div>
+        <h2 className="text-[20px] font-semibold text-neutral-900">{campusName}</h2>
+        <p className="text-[13px] text-neutral-500">
+          Class of {summary.graduation_year} · Grade 12 seniors
+        </p>
       </div>
     </div>
-  );
-};
 
-// ============================================
-// A-F SIMULATOR LINK CARD
-// ============================================
+    {/* Summary stats */}
+    <CampusSummaryCards summary={summary} />
 
-import { ArrowRight, Gauge } from "lucide-react";
+    {/* Action plan + ED forms side by side on large screens */}
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <InterventionActionPlan
+        interventions={interventions}
+        summary={summary}
+        campusName={campusName}
+      />
+      <EDFormTrackingCard summary={summary} />
+    </div>
 
-const AFSimulatorLinkCard = () => {
-  return (
+    {/* YoY trend */}
+    <CampusYoYTrend snapshots={snapshots} />
+
+    {/* A-F Simulator link */}
     <Link
       href="/pathways/simulator"
-      className="block p-5 bg-gradient-to-r from-teal-50 to-primary-50 border border-teal-200 rounded-lg hover:from-teal-100 hover:to-primary-100 transition-colors group"
+      className="flex items-center justify-between p-5 bg-gradient-to-r from-teal-50 to-primary-50 border border-teal-200 rounded-lg hover:from-teal-100 hover:to-primary-100 transition-colors group"
     >
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 bg-teal-500 rounded-lg flex items-center justify-center">
-            <Gauge className="w-6 h-6 text-neutral-0" />
-          </div>
-          <div>
-            <p className="text-[16px] font-semibold text-neutral-900">See how CCMR changes impact your A-F rating</p>
-            <p className="text-[13px] text-neutral-600 mt-0.5">
-              Use our simulator to model scenarios with TEA&apos;s actual accountability formula
-            </p>
-          </div>
+      <div className="flex items-center gap-4">
+        <div className="w-11 h-11 bg-teal-500 rounded-lg flex items-center justify-center flex-shrink-0">
+          <Gauge className="w-5 h-5 text-neutral-0" />
         </div>
-        <ArrowRight className="w-5 h-5 text-teal-500 group-hover:translate-x-1 transition-transform" />
+        <div>
+          <p className="text-[15px] font-semibold text-neutral-900">
+            See how these changes impact your A-F rating
+          </p>
+          <p className="text-[13px] text-neutral-500 mt-0.5">
+            Model scenarios with TEA&apos;s actual accountability formula
+          </p>
+        </div>
       </div>
+      <ArrowRight className="w-5 h-5 text-teal-500 group-hover:translate-x-1 transition-transform flex-shrink-0" />
     </Link>
+  </div>
+);
+
+// ============================================
+// DISTRICT OVERVIEW
+// ============================================
+
+const DistrictOverview = ({
+  summaries,
+  onSelectCampus,
+}: {
+  summaries: CampusCCMRSummaryRow[];
+  onSelectCampus: (id: string) => void;
+}) => {
+  const totals = summaries.reduce(
+    (acc, s) => ({
+      seniors: acc.seniors + s.total_seniors,
+      met: acc.met + s.ccmr_met,
+      atRisk: acc.atRisk + s.at_risk,
+      missingForms: acc.missingForms + s.missing_ed_forms,
+    }),
+    { seniors: 0, met: 0, atRisk: 0, missingForms: 0 }
   );
-};
-
-// ============================================
-// MAIN CAMPUS REPORTS PAGE
-// ============================================
-
-export const CampusReportsPage = () => {
-  const [selectedCampus, setSelectedCampus] = React.useState<Campus>(campuses[1]); // Default to Edinburg North
+  const districtRate =
+    totals.seniors > 0 ? Math.round((totals.met / totals.seniors) * 100) : 0;
 
   return (
     <div className="space-y-6">
-      {/* Campus Selector */}
-      <CampusSelector 
-        selectedCampus={selectedCampus} 
-        onCampusChange={setSelectedCampus} 
-      />
-
-      {/* Campus Header */}
-      <CampusHeaderCard campus={selectedCampus} />
-
-      {/* Two-column layout for indicator chart and subgroup comparison */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <CCMRByIndicatorSection />
-        <SubgroupComparisonSection />
+      {/* District summary row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="bg-neutral-0 border border-neutral-200 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-1">
+            <Users className="w-4 h-4 text-neutral-400" />
+            <p className="text-[12px] text-neutral-500">Total seniors</p>
+          </div>
+          <p className="text-[22px] font-bold text-neutral-900">
+            {totals.seniors.toLocaleString()}
+          </p>
+        </div>
+        <div className="bg-neutral-0 border border-neutral-200 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-1">
+            <CheckCircle2 className="w-4 h-4 text-teal-500" />
+            <p className="text-[12px] text-neutral-500">District CCMR rate</p>
+          </div>
+          <p
+            className={cn(
+              "text-[22px] font-bold",
+              districtRate >= 70
+                ? "text-teal-600"
+                : districtRate >= 60
+                ? "text-amber-600"
+                : "text-error"
+            )}
+          >
+            {districtRate}%
+          </p>
+        </div>
+        <div className="bg-neutral-0 border border-neutral-200 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-1">
+            <AlertCircle className="w-4 h-4 text-error" />
+            <p className="text-[12px] text-neutral-500">At risk (district)</p>
+          </div>
+          <p className="text-[22px] font-bold text-error">{totals.atRisk}</p>
+        </div>
+        <div className="bg-neutral-0 border border-neutral-200 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-1">
+            <FileText className="w-4 h-4 text-warning-dark" />
+            <p className="text-[12px] text-neutral-500">Missing ED forms</p>
+          </div>
+          <p
+            className={cn(
+              "text-[22px] font-bold",
+              totals.missingForms > 0 ? "text-warning-dark" : "text-teal-600"
+            )}
+          >
+            {totals.missingForms}
+          </p>
+        </div>
       </div>
 
-      {/* ED Documentation */}
-      <EDDocumentationSection />
+      {/* Campus comparison table */}
+      <ComparisonTable summaries={summaries} onSelectCampus={onSelectCampus} />
+    </div>
+  );
+};
 
-      {/* At-Risk Students */}
-      <AtRiskStudentsSection atRiskCount={selectedCampus.atRiskSeniors} />
+// ============================================
+// MAIN COMPONENT
+// ============================================
 
-      {/* Campus Action Plan */}
-      <CampusActionPlan campus={selectedCampus} />
-      
-      {/* A-F Simulator Link Card */}
-      <AFSimulatorLinkCard />
+export interface CampusReportsPageProps {
+  summaries: CampusCCMRSummaryRow[];
+  campuses: CampusRow[];
+}
+
+export const CampusReportsPage = ({ summaries, campuses }: CampusReportsPageProps) => {
+  const [selectedCampusId, setSelectedCampusId] = React.useState<string | null>(null);
+  const [snapshots, setSnapshots] = React.useState<SnapshotRow[]>([]);
+  const [interventions, setInterventions] = React.useState<InterventionRow[]>([]);
+  const [isLoading, setIsLoading] = React.useState(false);
+
+  const summaryById = React.useMemo(
+    () => new Map(summaries.map((s) => [s.campus_id, s])),
+    [summaries]
+  );
+  const campusNameById = React.useMemo(
+    () => new Map(campuses.map((c) => [c.id, c.name])),
+    [campuses]
+  );
+
+  const handleCampusSelect = React.useCallback(
+    async (id: string | null) => {
+      setSelectedCampusId(id);
+      if (!id) {
+        setSnapshots([]);
+        setInterventions([]);
+        return;
+      }
+      setIsLoading(true);
+      try {
+        const { snapshots: s, interventions: i } = await fetchCampusDetail(id);
+        setSnapshots(s);
+        setInterventions(i);
+      } catch (err) {
+        console.error("Failed to load campus data:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    []
+  );
+
+  const selectedSummary = selectedCampusId ? summaryById.get(selectedCampusId) : null;
+  const selectedCampusName = selectedCampusId
+    ? (campusNameById.get(selectedCampusId) ?? "Campus")
+    : null;
+
+  return (
+    <div className="space-y-6">
+      {/* Page header */}
+      <div>
+        <h1 className="text-[24px] font-semibold text-neutral-900">Campus Reports</h1>
+        <p className="text-[14px] text-neutral-600 mt-1">
+          Campus-by-campus CCMR breakdown for principals and district leadership
+        </p>
+      </div>
+
+      {/* Campus selector */}
+      <CampusSelector
+        campuses={campuses}
+        selectedId={selectedCampusId}
+        summaries={summaries}
+        onChange={handleCampusSelect}
+      />
+
+      {/* Content */}
+      {selectedCampusId && selectedSummary ? (
+        <SingleCampusView
+          summary={selectedSummary}
+          campusName={selectedCampusName!}
+          snapshots={snapshots}
+          interventions={interventions}
+          isLoading={isLoading}
+        />
+      ) : (
+        <DistrictOverview summaries={summaries} onSelectCampus={handleCampusSelect} />
+      )}
     </div>
   );
 };

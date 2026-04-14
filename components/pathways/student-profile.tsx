@@ -8,191 +8,131 @@ import {
   X,
   Clock,
   AlertCircle,
-  ChevronRight,
-  Calendar,
-  GraduationCap,
-  Info,
   Minus,
+  ChevronRight,
+  GraduationCap,
+  Calendar,
+  AlertTriangle,
+  User,
+  BookOpen,
+  Briefcase,
+  Award,
 } from "lucide-react";
+import type {
+  CCMRReadiness,
+  IndicatorRow,
+  IndicatorType,
+  InterventionRow,
+  InterventionStatus,
+  StudentRow,
+} from "@/types/database";
 
 /* ============================================
-   Summit Pathways Student CCMR Profile
-   Individual Student CCMR Detail View
+   Summit Pathways — Student Profile
    ============================================ */
 
 // ============================================
-// TYPES
+// INDICATOR METADATA
 // ============================================
 
-type IndicatorStatus = "met" | "in-progress" | "not-met" | "not-attempted" | "info-only";
-
-interface CCMRIndicator {
-  name: string;
-  status: IndicatorStatus;
-  detail: string;
-}
-
-interface SemesterCard {
-  semester: string;
-  year: string;
-  isCurrent?: boolean;
-  isFuture?: boolean;
-  events: SemesterEvent[];
-}
-
-interface SemesterEvent {
-  status: "completed" | "in-progress" | "failed" | "upcoming" | "not-scheduled";
-  label: string;
-  detail?: string;
-  isNextAction?: boolean;
-}
-
-interface StudentCCMRData {
-  id: string;
-  name: string;
-  studentId: string;
-  campus: string;
-  grade: number;
-  ctePathway?: string;
-  isEB?: boolean;
-  isEconDisadv?: boolean;
-  isSpecialEd?: boolean;
-  advancedTester?: { exam: string; grade: string }; // e.g., { exam: "Algebra I EOC", grade: "8th" }
-  ccmrStatus: "at-risk" | "almost" | "on-track" | "met";
-  indicators: CCMRIndicator[];
-  gpa: number;
-  attendance: number;
-  creditsEarned: number;
-  creditsRequired: number;
-  pathwaySemesters: SemesterCard[];
-  ccmrProjection: {
-    activePaths: { name: string; probability: string; detail: string }[];
-    recommendation: string;
-  };
-}
-
-// ============================================
-// MOCK DATA
-// ============================================
-
-export const mockStudentCCMR: StudentCCMRData = {
-  id: "2",
-  name: "Luis Hernandez",
-  studentId: "201502",
-  campus: "Edinburg H S",
-  grade: 11,
-  ctePathway: "Welding (Year 2 of 2)",
-  isEB: true,
-  isEconDisadv: true,
-  // advancedTester: { exam: "Algebra I EOC", grade: "8th" }, // Uncomment for students with advanced testing
-  ccmrStatus: "at-risk",
-  indicators: [
-    { name: "Industry-based certification", status: "in-progress", detail: "AWS Welding cert — exam scheduled Apr 28" },
-    { name: "TSI college ready (ELA)", status: "not-attempted", detail: "Has not taken TSIA" },
-    { name: "TSI college ready (Math)", status: "not-attempted", detail: "Has not taken TSIA" },
-    { name: "Dual credit course", status: "not-met", detail: "No dual credit courses on transcript" },
-    { name: "AP exam (3+)", status: "not-met", detail: "Not enrolled in AP courses" },
-    { name: "SAT college ready", status: "not-met", detail: "SAT: 890 (needs 1010). ELA: 420 (needs 480). Math: 470 (needs 530). 60 points from ELA threshold, 60 from Math." },
-    { name: "PSAT (10th grade)", status: "info-only", detail: "PSAT: 820. Trending upward from 780 in 9th grade." },
-    { name: "ACT college ready", status: "not-attempted", detail: "—" },
-    { name: "College prep course", status: "not-met", detail: "—" },
-    { name: "Military enlistment", status: "not-met", detail: "—" },
-    { name: "OnRamps", status: "not-met", detail: "—" },
-    { name: "Associate degree", status: "not-met", detail: "—" },
-    { name: "Level I/II certificate", status: "not-met", detail: "—" },
-  ],
-  gpa: 2.4,
-  attendance: 88,
-  creditsEarned: 18,
-  creditsRequired: 26,
-  pathwaySemesters: [
-    {
-      semester: "Fall",
-      year: "2024-25",
-      events: [
-        { status: "completed", label: "Enrolled in Welding I (CTE Year 1 of 2)", detail: "Completed, grade: B (82)" },
-        { status: "completed", label: "PSAT taken: 820", detail: "Up from 780 freshman year" },
-        { status: "not-scheduled", label: "No dual credit courses" },
-      ],
-    },
-    {
-      semester: "Spring",
-      year: "2024-25",
-      events: [
-        { status: "completed", label: "Welding I completed", detail: "Passed with B (79)" },
-        { status: "not-scheduled", label: "SAT not yet taken" },
-        { status: "not-scheduled", label: "TSIA not attempted" },
-      ],
-    },
-    {
-      semester: "Fall",
-      year: "2025-26",
-      isCurrent: true,
-      events: [
-        { status: "in-progress", label: "Enrolled in Welding II (CTE Year 2 of 2)", detail: "In progress, current grade: B+ (86)" },
-        { status: "failed", label: "SAT taken October: 890", detail: "Below 1010 threshold" },
-        { status: "not-scheduled", label: "No college prep courses enrolled" },
-      ],
-    },
-    {
-      semester: "Spring",
-      year: "2025-26",
-      isCurrent: true,
-      events: [
-        { status: "upcoming", label: "Welding II completion expected May 2026" },
-        { status: "upcoming", label: "AWS Welding certification exam: Apr 28", isNextAction: true },
-        { status: "upcoming", label: "TSIA testing window: May 1-15", detail: "Not yet scheduled" },
-        { status: "upcoming", label: "SAT retake opportunity: May 3", detail: "Not yet registered" },
-      ],
-    },
-    {
-      semester: "Fall",
-      year: "2026-27",
-      isFuture: true,
-      events: [
-        { status: "upcoming", label: "If IBC not earned junior year: Final exam opportunity in fall" },
-        { status: "upcoming", label: "If SAT still below threshold: October SAT retake" },
-        { status: "upcoming", label: "College prep ELA course available as backup pathway" },
-      ],
-    },
-  ],
-  ccmrProjection: {
-    activePaths: [
-      {
-        name: "IBC (highest probability)",
-        probability: "high",
-        detail: "AWS Welding exam Apr 28. If he passes, CCMR is met immediately. His Welding II grade of B+ suggests strong preparation.",
-      },
-      {
-        name: "TSIA (moderate probability)",
-        probability: "medium",
-        detail: "Has never attempted. Schedule for May testing window. Based on SAT of 890, estimated 40-50% chance of meeting TSI threshold.",
-      },
-      {
-        name: "SAT retake (lower probability)",
-        probability: "low",
-        detail: "Needs 120-point improvement to reach 1010. Possible with targeted prep but unlikely by May.",
-      },
-    ],
-    recommendation: "Focus on IBC exam preparation. Register for TSIA as backup. SAT retake only if both others fail.",
-  },
+const INDICATOR_LABELS: Record<IndicatorType, string> = {
+  tsi_reading: "TSI Reading",
+  tsi_math: "TSI Math",
+  sat_reading: "SAT Reading",
+  sat_math: "SAT Math",
+  act_reading: "ACT Reading",
+  act_math: "ACT Math",
+  college_prep_ela: "College Prep ELA",
+  college_prep_math: "College Prep Math",
+  dual_credit_ela: "Dual Credit ELA",
+  dual_credit_math: "Dual Credit Math",
+  dual_credit_any: "Dual Credit (9 hr)",
+  ap_exam: "AP Exam",
+  ib_exam: "IB Exam",
+  ibc: "Industry-Based Certification",
+  associate_degree: "Associate Degree",
+  level_i_ii_certificate: "Level I/II Certificate",
+  onramps: "OnRamps",
+  military_enlistment: "Military Enlistment",
+  iep_completion: "IEP Completion",
+  sped_advanced_degree: "SpEd Advanced Degree",
 };
 
+const INDICATOR_CATEGORIES: { label: string; icon: React.ElementType; types: IndicatorType[] }[] = [
+  {
+    label: "College Readiness",
+    icon: BookOpen,
+    types: ["tsi_reading", "tsi_math", "sat_reading", "sat_math", "act_reading", "act_math"],
+  },
+  {
+    label: "College Prep Courses",
+    icon: GraduationCap,
+    types: ["college_prep_ela", "college_prep_math"],
+  },
+  {
+    label: "Dual Credit",
+    icon: Award,
+    types: ["dual_credit_ela", "dual_credit_math", "dual_credit_any"],
+  },
+  {
+    label: "AP / IB",
+    icon: Award,
+    types: ["ap_exam", "ib_exam"],
+  },
+  {
+    label: "Career",
+    icon: Briefcase,
+    types: ["ibc", "associate_degree", "level_i_ii_certificate"],
+  },
+  {
+    label: "Other",
+    icon: User,
+    types: ["onramps", "military_enlistment", "iep_completion", "sped_advanced_degree"],
+  },
+];
+
 // ============================================
-// STATUS BADGE (Large)
+// HELPERS
 // ============================================
 
-const StatusBadgeLarge = ({ status }: { status: StudentCCMRData["ccmrStatus"] }) => {
-  const config = {
-    "at-risk": { label: "At Risk", className: "bg-error text-neutral-0" },
-    "almost": { label: "Almost", className: "bg-warning text-neutral-0" },
-    "on-track": { label: "On Track", className: "bg-primary-500 text-neutral-0" },
-    "met": { label: "CCMR Met", className: "bg-teal-600 text-neutral-0" },
-  };
+function daysUntil(dateStr: string): number {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(dateStr);
+  target.setHours(0, 0, 0, 0);
+  return Math.max(0, Math.ceil((target.getTime() - today.getTime()) / 86_400_000));
+}
 
+function formatDate(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+// ============================================
+// READINESS BADGE (large)
+// ============================================
+
+const READINESS_CONFIG: Record<CCMRReadiness, { label: string; className: string }> = {
+  met: { label: "CCMR Met", className: "bg-teal-600 text-neutral-0" },
+  on_track: { label: "On Track", className: "bg-primary-500 text-neutral-0" },
+  almost: { label: "Almost", className: "bg-warning text-neutral-0" },
+  at_risk: { label: "At Risk", className: "bg-error text-neutral-0" },
+  too_early: { label: "Too Early", className: "bg-neutral-400 text-neutral-0" },
+};
+
+const ReadinessBadgeLarge = ({ status }: { status: CCMRReadiness }) => {
+  const { label, className } = READINESS_CONFIG[status] ?? READINESS_CONFIG.too_early;
   return (
-    <span className={cn("px-4 py-2 rounded-lg text-[14px] font-bold uppercase tracking-wide", config[status].className)}>
-      {config[status].label}
+    <span
+      className={cn(
+        "px-4 py-2 rounded-lg text-[14px] font-bold uppercase tracking-wide",
+        className
+      )}
+    >
+      {label}
     </span>
   );
 };
@@ -201,183 +141,123 @@ const StatusBadgeLarge = ({ status }: { status: StudentCCMRData["ccmrStatus"] })
 // INDICATOR STATUS ICON
 // ============================================
 
-const IndicatorStatusIcon = ({ status }: { status: IndicatorStatus }) => {
+const IndicatorIcon = ({ status }: { status: IndicatorRow["status"] | "not_attempted" }) => {
   switch (status) {
     case "met":
-      return <CheckCircle2 className="w-5 h-5 text-teal-600" />;
-    case "in-progress":
-      return <Clock className="w-5 h-5 text-warning-dark" />;
-    case "not-met":
-      return <X className="w-5 h-5 text-error" />;
-    case "not-attempted":
-      return <X className="w-5 h-5 text-neutral-400" />;
-    case "info-only":
-      return <Info className="w-5 h-5 text-primary-400" />;
+      return <CheckCircle2 className="w-4 h-4 text-teal-600 flex-shrink-0" />;
+    case "in_progress":
+      return <Clock className="w-4 h-4 text-warning-dark flex-shrink-0" />;
+    case "not_met":
+      return <X className="w-4 h-4 text-error flex-shrink-0" />;
+    default:
+      return <Minus className="w-4 h-4 text-neutral-300 flex-shrink-0" />;
   }
 };
 
-const getIndicatorStatusLabel = (status: IndicatorStatus): string => {
-  switch (status) {
-    case "met": return "Met";
-    case "in-progress": return "In progress";
-    case "not-met": return "Below threshold";
-    case "not-attempted": return "Not attempted";
-    case "info-only": return "Info only";
-  }
+const INDICATOR_STATUS_LABEL: Record<string, string> = {
+  met: "Met",
+  in_progress: "In progress",
+  not_met: "Not met",
+  not_attempted: "Not attempted",
+};
+
+const INDICATOR_STATUS_COLOR: Record<string, string> = {
+  met: "text-teal-600",
+  in_progress: "text-warning-dark",
+  not_met: "text-error",
+  not_attempted: "text-neutral-400",
 };
 
 // ============================================
 // STUDENT HEADER
 // ============================================
 
-const StudentHeader = ({ student }: { student: StudentCCMRData }) => {
+interface StudentHeaderProps {
+  student: StudentRow;
+  campusName: string;
+  graduationDate: string | null;
+}
+
+const StudentHeader = ({ student, campusName, graduationDate }: StudentHeaderProps) => {
+  const initials = (student.last_name[0] ?? "") + (student.first_name[0] ?? "");
+  const isAtRisk = student.ccmr_readiness === "at_risk";
+  const isSenior = student.grade_level === 12;
+  const daysLeft = graduationDate ? daysUntil(graduationDate) : null;
+  const meta = student.metadata as Record<string, unknown>;
+
   return (
-    <div className="bg-neutral-0 border border-neutral-200 rounded-lg p-6">
-      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-        {/* Left: Avatar + Info */}
-        <div className="flex items-start gap-4">
-          <div className="w-16 h-16 bg-teal-100 rounded-full flex items-center justify-center flex-shrink-0">
-            <span className="text-[24px] font-bold text-teal-700">
-              {student.name.split(" ").map(n => n[0]).join("")}
-            </span>
-          </div>
-          <div>
-            <h1 className="text-[24px] font-semibold text-neutral-900">{student.name}</h1>
-            <p className="text-[14px] text-neutral-500 mt-0.5">#{student.studentId}</p>
-            <div className="flex flex-wrap items-center gap-2 mt-3">
-              <span className="px-3 py-1 bg-neutral-100 text-neutral-700 text-[12px] font-medium rounded-full">
-                {student.campus}
-              </span>
-              <span className="px-3 py-1 bg-neutral-100 text-neutral-700 text-[12px] font-medium rounded-full">
-                Grade {student.grade}
-              </span>
-              {student.advancedTester && (
-                <span className="px-3 py-1 bg-purple-100 text-purple-700 text-[12px] font-medium rounded-full">
-                  Adv tester: {student.advancedTester.exam} ({student.advancedTester.grade} grade)
-                </span>
-              )}
-              {student.isEB && (
-                <span className="px-3 py-1 bg-primary-100 text-primary-700 text-[12px] font-medium rounded-full">
-                  EB
-                </span>
-              )}
-              {student.ctePathway && (
-                <span className="px-3 py-1 bg-teal-100 text-teal-700 text-[12px] font-medium rounded-full">
-                  CTE: {student.ctePathway.split(" ")[0]}
-                </span>
-              )}
+    <div className="space-y-3">
+      {/* Alert banner for at-risk seniors */}
+      {isAtRisk && isSenior && daysLeft !== null && (
+        <div className="flex items-center gap-3 px-4 py-3 bg-error-light border border-error rounded-lg">
+          <AlertTriangle className="w-5 h-5 text-error flex-shrink-0" />
+          <p className="text-[13px] font-medium text-error-dark">
+            This student has not met any CCMR indicator and graduates in{" "}
+            <span className="font-bold">{daysLeft} days</span>. Immediate intervention recommended.
+          </p>
+        </div>
+      )}
+
+      <div className="bg-neutral-0 border border-neutral-200 rounded-lg p-6">
+        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+          {/* Left: Avatar + info */}
+          <div className="flex items-start gap-4">
+            <div className="w-16 h-16 bg-teal-100 rounded-full flex items-center justify-center flex-shrink-0">
+              <span className="text-[22px] font-bold text-teal-700 uppercase">{initials}</span>
             </div>
-          </div>
-        </div>
+            <div>
+              <h1 className="text-[24px] font-semibold text-neutral-900">
+                {student.first_name} {student.last_name}
+              </h1>
+              <p className="text-[13px] text-neutral-500 mt-0.5">TSDS #{student.tsds_id}</p>
 
-        {/* Right: Status Badge */}
-        <div className="flex-shrink-0">
-          <StatusBadgeLarge status={student.ccmrStatus} />
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// ============================================
-// CCMR INDICATOR CHECKLIST
-// ============================================
-
-const CCMRIndicatorChecklist = ({ indicators }: { indicators: CCMRIndicator[] }) => {
-  return (
-    <div className="bg-neutral-0 border border-neutral-200 rounded-lg p-6">
-      <h2 className="text-[18px] font-semibold text-neutral-900 mb-4">CCMR indicator checklist</h2>
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-neutral-200">
-              <th className="text-left text-[12px] font-semibold text-neutral-700 pb-3 w-[220px]">Indicator</th>
-              <th className="text-left text-[12px] font-semibold text-neutral-700 pb-3 w-[130px]">Status</th>
-              <th className="text-left text-[12px] font-semibold text-neutral-700 pb-3">Detail</th>
-            </tr>
-          </thead>
-          <tbody>
-            {indicators.map((indicator, idx) => (
-              <tr 
-                key={idx} 
-                className={cn(
-                  "border-b border-neutral-100 last:border-0",
-                  indicator.status === "info-only" && "bg-primary-50/30"
+              <div className="flex flex-wrap items-center gap-2 mt-3">
+                <span className="px-3 py-1 bg-neutral-100 text-neutral-700 text-[12px] font-medium rounded-full">
+                  {campusName}
+                </span>
+                <span className="px-3 py-1 bg-neutral-100 text-neutral-700 text-[12px] font-medium rounded-full flex items-center gap-1">
+                  <GraduationCap className="w-3.5 h-3.5" />
+                  Grade {student.grade_level}
+                </span>
+                <span className="px-3 py-1 bg-neutral-100 text-neutral-700 text-[12px] font-medium rounded-full flex items-center gap-1">
+                  <Calendar className="w-3.5 h-3.5" />
+                  Class of {student.graduation_year}
+                </span>
+                {student.is_eb && (
+                  <span className="px-3 py-1 bg-primary-100 text-primary-700 text-[12px] font-medium rounded-full">
+                    English Learner (EB)
+                  </span>
                 )}
-              >
-                <td className="py-3 text-[13px] text-neutral-900">{indicator.name}</td>
-                <td className="py-3">
-                  <div className="flex items-center gap-2">
-                    <IndicatorStatusIcon status={indicator.status} />
-                    <span className={cn(
-                      "text-[12px]",
-                      indicator.status === "met" ? "text-teal-600" :
-                      indicator.status === "in-progress" ? "text-warning-dark" :
-                      indicator.status === "not-met" ? "text-error" :
-                      indicator.status === "info-only" ? "text-primary-500" :
-                      "text-neutral-400"
-                    )}>
-                      {getIndicatorStatusLabel(indicator.status)}
-                    </span>
-                  </div>
-                </td>
-                <td className="py-3 text-[13px] text-neutral-600">
-                  {indicator.detail === "—" ? (
-                    <span className="text-neutral-400">—</span>
-                  ) : (
-                    indicator.detail
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-};
-
-// ============================================
-// RECOMMENDED INTERVENTIONS
-// ============================================
-
-const RecommendedInterventions = ({ student }: { student: StudentCCMRData }) => {
-  return (
-    <div className="bg-neutral-0 border border-neutral-200 rounded-lg p-6">
-      <h2 className="text-[18px] font-semibold text-neutral-900 mb-4">Recommended interventions</h2>
-      
-      <div className="space-y-4">
-        {/* Primary recommendation */}
-        <div className="p-4 bg-teal-50 border border-teal-200 rounded-lg">
-          <div className="flex items-start gap-3">
-            <div className="w-8 h-8 bg-teal-600 rounded-full flex items-center justify-center flex-shrink-0">
-              <GraduationCap className="w-4 h-4 text-neutral-0" />
-            </div>
-            <div>
-              <h3 className="text-[14px] font-semibold text-teal-800">
-                Fastest path to CCMR: Industry-based certification
-              </h3>
-              <p className="text-[13px] text-teal-700 mt-2 leading-relaxed">
-                {student.name.split(" ")[0]} is enrolled in the Welding program and has an AWS certification exam scheduled for April 28. If he passes, he meets CCMR. Ensure he&apos;s prepared and the exam registration is confirmed.
-              </p>
+                {student.is_econ_disadvantaged && (
+                  <span className="px-3 py-1 bg-warning-light text-warning-dark text-[12px] font-medium rounded-full">
+                    Econ Disadvantaged
+                  </span>
+                )}
+                {student.is_special_ed && (
+                  <span className="px-3 py-1 bg-purple-100 text-purple-700 text-[12px] font-medium rounded-full">
+                    Special Education
+                  </span>
+                )}
+                {student.is_504 && (
+                  <span className="px-3 py-1 bg-neutral-100 text-neutral-600 text-[12px] font-medium rounded-full">
+                    504
+                  </span>
+                )}
+                {!!meta.cte_pathway && (
+                  <span className="px-3 py-1 bg-teal-100 text-teal-700 text-[12px] font-medium rounded-full">
+                    CTE: {String(meta.cte_pathway)}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Backup recommendation */}
-        <div className="p-4 bg-neutral-50 border border-neutral-200 rounded-lg">
-          <div className="flex items-start gap-3">
-            <div className="w-8 h-8 bg-neutral-400 rounded-full flex items-center justify-center flex-shrink-0">
-              <AlertCircle className="w-4 h-4 text-neutral-0" />
-            </div>
-            <div>
-              <h3 className="text-[14px] font-semibold text-neutral-800">
-                Backup path: TSI Assessment
-              </h3>
-              <p className="text-[13px] text-neutral-600 mt-2 leading-relaxed">
-                {student.name.split(" ")[0]} has never attempted the TSIA. Scheduling a testing session before the May window would give him a second chance at CCMR if the IBC exam doesn&apos;t work out.
-              </p>
-            </div>
+          {/* Right: Readiness badge */}
+          <div className="flex-shrink-0 flex flex-col items-end gap-2">
+            <ReadinessBadgeLarge status={student.ccmr_readiness} />
+            <p className="text-[12px] text-neutral-500">
+              {student.indicators_met_count} indicator{student.indicators_met_count !== 1 ? "s" : ""} met
+            </p>
           </div>
         </div>
       </div>
@@ -386,228 +266,418 @@ const RecommendedInterventions = ({ student }: { student: StudentCCMRData }) => 
 };
 
 // ============================================
-// ACADEMIC SNAPSHOT
+// CCMR INDICATOR GRID
 // ============================================
 
-const AcademicSnapshot = ({ student }: { student: StudentCCMRData }) => {
+function buildIndicatorDetail(row: IndicatorRow): string {
+  const parts: string[] = [];
+
+  if (row.status === "met" && row.met_date) {
+    parts.push(`Met ${formatDate(row.met_date)}`);
+  }
+  if (row.score !== null && row.threshold !== null) {
+    parts.push(`Score: ${row.score} / threshold: ${row.threshold}`);
+  } else if (row.score !== null) {
+    parts.push(`Score: ${row.score}`);
+  }
+  if (row.course_grade) parts.push(`Grade: ${row.course_grade}`);
+  if (row.exam_date) parts.push(`Exam: ${formatDate(row.exam_date)}`);
+  if (row.notes) parts.push(row.notes);
+
+  return parts.join(" · ") || "—";
+}
+
+const CCMRIndicatorGrid = ({ indicators }: { indicators: IndicatorRow[] }) => {
+  const byType = new Map<IndicatorType, IndicatorRow>(
+    indicators.map((r) => [r.indicator_type, r])
+  );
+
   return (
     <div className="bg-neutral-0 border border-neutral-200 rounded-lg p-6">
-      <h2 className="text-[18px] font-semibold text-neutral-900 mb-4">Academic snapshot</h2>
-      
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div>
-          <p className="text-[12px] text-neutral-500 mb-1">GPA</p>
-          <p className={cn(
-            "text-[20px] font-bold",
-            student.gpa >= 3.0 ? "text-teal-600" : student.gpa >= 2.0 ? "text-warning-dark" : "text-error"
-          )}>
-            {student.gpa.toFixed(1)}
-          </p>
-        </div>
-        <div>
-          <p className="text-[12px] text-neutral-500 mb-1">Attendance</p>
-          <p className={cn(
-            "text-[20px] font-bold",
-            student.attendance >= 95 ? "text-teal-600" : student.attendance >= 85 ? "text-warning-dark" : "text-error"
-          )}>
-            {student.attendance}%
-          </p>
-        </div>
-        <div>
-          <p className="text-[12px] text-neutral-500 mb-1">CTE pathway</p>
-          <p className="text-[14px] font-medium text-neutral-900">{student.ctePathway || "—"}</p>
-        </div>
-        <div>
-          <p className="text-[12px] text-neutral-500 mb-1">Credits earned</p>
-          <p className="text-[20px] font-bold text-neutral-900">
-            {student.creditsEarned} <span className="text-[14px] font-normal text-neutral-500">of {student.creditsRequired}</span>
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-};
+      <h2 className="text-[18px] font-semibold text-neutral-900 mb-5">CCMR indicators</h2>
 
-// ============================================
-// SEMESTER EVENT STATUS ICON
-// ============================================
+      <div className="space-y-6">
+        {INDICATOR_CATEGORIES.map(({ label, icon: Icon, types }) => (
+          <div key={label}>
+            <div className="flex items-center gap-2 mb-3">
+              <Icon className="w-4 h-4 text-neutral-400" />
+              <h3 className="text-[12px] font-semibold text-neutral-500 uppercase tracking-wide">
+                {label}
+              </h3>
+            </div>
+            <div className="border border-neutral-200 rounded-lg overflow-hidden">
+              <table className="w-full">
+                <tbody>
+                  {types.map((type, idx) => {
+                    const row = byType.get(type);
+                    const status = row?.status ?? "not_attempted";
+                    const detail = row ? buildIndicatorDetail(row) : "—";
 
-const SemesterEventIcon = ({ status, isNextAction }: { status: SemesterEvent["status"]; isNextAction?: boolean }) => {
-  if (isNextAction) {
-    return (
-      <div className="w-5 h-5 rounded-full bg-teal-500 flex items-center justify-center ring-2 ring-teal-200">
-        <ChevronRight className="w-3 h-3 text-neutral-0" />
-      </div>
-    );
-  }
-  
-  switch (status) {
-    case "completed":
-      return <CheckCircle2 className="w-5 h-5 text-teal-600" />;
-    case "in-progress":
-      return <Clock className="w-5 h-5 text-primary-500" />;
-    case "failed":
-      return <X className="w-5 h-5 text-error" />;
-    case "upcoming":
-      return <div className="w-5 h-5 rounded-full border-2 border-neutral-300 flex items-center justify-center">
-        <ChevronRight className="w-3 h-3 text-neutral-400" />
-      </div>;
-    case "not-scheduled":
-      return <Minus className="w-5 h-5 text-neutral-300" />;
-  }
-};
-
-// ============================================
-// CCMR PATHWAY PLANNER
-// ============================================
-
-const CCMRPathwayPlanner = ({ student }: { student: StudentCCMRData }) => {
-  // Group semesters by academic year
-  const semestersByYear: Record<string, SemesterCard[]> = {};
-  student.pathwaySemesters.forEach(sem => {
-    if (!semestersByYear[sem.year]) {
-      semestersByYear[sem.year] = [];
-    }
-    semestersByYear[sem.year].push(sem);
-  });
-
-  const yearLabels: Record<string, string> = {
-    "2024-25": "Sophomore year (2024-25)",
-    "2025-26": "Junior year (2025-26) — CURRENT",
-    "2026-27": "Senior year (2026-27) — PROJECTED",
-  };
-
-  return (
-    <div className="bg-neutral-0 border border-neutral-200 rounded-lg overflow-hidden">
-      <div className="p-6 border-b border-neutral-200">
-        <h2 className="text-[18px] font-semibold text-neutral-900">
-          {student.name} — CCMR pathway planner
-        </h2>
-        <p className="text-[13px] text-neutral-500 mt-1">
-          Tracking progress across semesters toward CCMR indicators
-        </p>
-      </div>
-
-      <div className="p-6 space-y-8">
-        {Object.entries(semestersByYear).map(([year, semesters]) => (
-          <div key={year}>
-            {/* Year heading */}
-            <h3 className={cn(
-              "text-[14px] font-semibold mb-4",
-              semesters.some(s => s.isCurrent) ? "text-teal-700" :
-              semesters.some(s => s.isFuture) ? "text-neutral-400" :
-              "text-neutral-700"
-            )}>
-              {yearLabels[year] || year}
-            </h3>
-
-            {/* Semester cards in a grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {semesters.map((semester, idx) => (
-                <div
-                  key={idx}
-                  className={cn(
-                    "p-4 rounded-lg border",
-                    semester.isFuture ? "bg-neutral-50 border-neutral-200 opacity-70" :
-                    semester.isCurrent ? "bg-primary-50/50 border-primary-200" :
-                    "bg-neutral-0 border-neutral-200"
-                  )}
-                >
-                  <p className={cn(
-                    "text-[12px] font-semibold uppercase tracking-wide mb-3",
-                    semester.isCurrent ? "text-primary-600" :
-                    semester.isFuture ? "text-neutral-400" :
-                    "text-neutral-500"
-                  )}>
-                    {semester.semester} semester
-                    {semester.isFuture && " (projected)"}
-                  </p>
-
-                  <div className="space-y-2.5">
-                    {semester.events.map((event, eventIdx) => (
-                      <div
-                        key={eventIdx}
+                    return (
+                      <tr
+                        key={type}
                         className={cn(
-                          "flex items-start gap-2.5",
-                          event.isNextAction && "p-2 -mx-2 bg-teal-100 rounded-md"
+                          "border-b border-neutral-100 last:border-0",
+                          status === "met" && "bg-teal-50/40",
+                          status === "in_progress" && "bg-warning-light/20",
+                          idx % 2 === 1 && status === "not_attempted" && "bg-neutral-50/50"
                         )}
                       >
-                        <div className="flex-shrink-0 mt-0.5">
-                          <SemesterEventIcon status={event.status} isNextAction={event.isNextAction} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className={cn(
-                            "text-[13px]",
-                            event.isNextAction ? "text-teal-800 font-semibold" :
-                            event.status === "completed" ? "text-neutral-700" :
-                            event.status === "failed" ? "text-error" :
-                            event.status === "in-progress" ? "text-primary-700" :
-                            event.status === "not-scheduled" ? "text-neutral-400" :
-                            "text-neutral-600"
-                          )}>
-                            {event.label}
-                          </p>
-                          {event.detail && (
-                            <p className={cn(
-                              "text-[11px] mt-0.5",
-                              event.isNextAction ? "text-teal-600" : "text-neutral-400"
-                            )}>
-                              {event.detail}
-                            </p>
-                          )}
-                          {event.isNextAction && (
-                            <span className="inline-block mt-1.5 px-2 py-0.5 bg-teal-600 text-neutral-0 text-[10px] font-bold uppercase rounded">
-                              Next Action
+                        <td className="px-4 py-3 text-[13px] text-neutral-900 w-[200px]">
+                          {INDICATOR_LABELS[type]}
+                        </td>
+                        <td className="px-4 py-3 w-[130px]">
+                          <div className="flex items-center gap-2">
+                            <IndicatorIcon status={status} />
+                            <span
+                              className={cn(
+                                "text-[12px] font-medium",
+                                INDICATOR_STATUS_COLOR[status] ?? "text-neutral-400"
+                              )}
+                            >
+                              {INDICATOR_STATUS_LABEL[status] ?? status}
                             </span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-[12px] text-neutral-500">
+                          {detail === "—" ? (
+                            <span className="text-neutral-300">—</span>
+                          ) : (
+                            detail
                           )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
         ))}
       </div>
+    </div>
+  );
+};
 
-      {/* CCMR Projection Summary */}
-      <div className="p-6 border-t border-neutral-200 bg-teal-50">
-        <h3 className="text-[14px] font-semibold text-teal-800 mb-3">
-          {student.name.split(" ")[0]} has {student.ccmrProjection.activePaths.length} active pathways to CCMR this year:
-        </h3>
-        
-        <div className="space-y-3">
-          {student.ccmrProjection.activePaths.map((path, idx) => (
-            <div key={idx} className="flex items-start gap-2">
-              <div className={cn(
-                "w-2 h-2 rounded-full mt-1.5 flex-shrink-0",
-                path.probability === "high" ? "bg-teal-600" :
-                path.probability === "medium" ? "bg-warning" :
-                "bg-neutral-400"
-              )} />
-              <div>
-                <p className="text-[13px] font-medium text-teal-900">{path.name}</p>
-                <p className="text-[12px] text-teal-700 mt-0.5">{path.detail}</p>
+// ============================================
+// NEAREST PATHWAY SUMMARY
+// ============================================
+
+interface PathwaySuggestion {
+  label: string;
+  detail: string;
+  priority: "high" | "medium" | "low";
+}
+
+function deriveNearestPaths(student: StudentRow, indicators: IndicatorRow[]): PathwaySuggestion[] {
+  const meta = student.metadata as Record<string, unknown>;
+  const paths: PathwaySuggestion[] = [];
+  const inProgress = indicators.filter((i) => i.status === "in_progress");
+  const ibcInProgress = inProgress.find((i) => i.indicator_type === "ibc");
+
+  // 1. CTE/IBC path from metadata (highest specificity)
+  if (meta.cte_certification && meta.cte_exam_date) {
+    const examLabel = `Exam: ${formatDate(String(meta.cte_exam_date))}`;
+    paths.push({
+      label: `IBC — ${meta.cte_certification}`,
+      detail: ibcInProgress?.notes
+        ? `${ibcInProgress.notes} · ${examLabel}`
+        : `${meta.cte_pathway ? `Enrolled in ${meta.cte_pathway}. ` : ""}${examLabel}. If passed, CCMR is met immediately.`,
+      priority: "high",
+    });
+  } else if (ibcInProgress) {
+    paths.push({
+      label: "Industry-Based Certification (IBC)",
+      detail: ibcInProgress.notes ?? (ibcInProgress.exam_date ? `Exam: ${formatDate(ibcInProgress.exam_date)}` : "In progress"),
+      priority: "high",
+    });
+  }
+
+  // 2. Other in-progress indicators (skip IBC since handled above)
+  for (const ind of inProgress) {
+    if (ind.indicator_type === "ibc") continue;
+    if (paths.length >= 3) break;
+    const detail = [
+      ind.course_grade ? `Current grade: ${ind.course_grade}` : null,
+      ind.exam_date ? `Exam: ${formatDate(ind.exam_date)}` : null,
+      ind.notes,
+    ]
+      .filter(Boolean)
+      .join(" · ") || "In progress";
+    paths.push({
+      label: INDICATOR_LABELS[ind.indicator_type],
+      detail,
+      priority: "medium",
+    });
+  }
+
+  // 3. Suggest TSI if not attempted and slots remain
+  if (paths.length < 3) {
+    const tsiAttempted = indicators.some(
+      (i) => i.indicator_type === "tsi_reading" || i.indicator_type === "tsi_math"
+    );
+    if (!tsiAttempted) {
+      paths.push({
+        label: "TSI Assessment",
+        detail: "Not yet attempted — schedule for the next testing window as a quick backup pathway.",
+        priority: paths.length === 0 ? "medium" : "low",
+      });
+    }
+  }
+
+  // 4. If still empty, generic guidance
+  if (paths.length === 0) {
+    paths.push({
+      label: "No active pathway identified",
+      detail: "Review available indicators and enroll the student in a pathway course or test.",
+      priority: "low",
+    });
+  }
+
+  return paths.slice(0, 3);
+}
+
+const PRIORITY_STYLES: Record<PathwaySuggestion["priority"], { bg: string; icon: string; title: string; text: string }> = {
+  high: { bg: "bg-teal-50 border-teal-200", icon: "bg-teal-600", title: "text-teal-800", text: "text-teal-700" },
+  medium: { bg: "bg-neutral-50 border-neutral-200", icon: "bg-primary-400", title: "text-neutral-800", text: "text-neutral-600" },
+  low: { bg: "bg-neutral-50 border-neutral-200", icon: "bg-neutral-300", title: "text-neutral-700", text: "text-neutral-500" },
+};
+
+const NearestPathwaySummary = ({
+  student,
+  indicators,
+}: {
+  student: StudentRow;
+  indicators: IndicatorRow[];
+}) => {
+  if (student.ccmr_readiness === "met") return null;
+
+  const paths = deriveNearestPaths(student, indicators);
+
+  return (
+    <div className="bg-neutral-0 border border-neutral-200 rounded-lg p-6">
+      <h2 className="text-[18px] font-semibold text-neutral-900 mb-4">Nearest paths to CCMR</h2>
+      <div className="space-y-3">
+        {paths.map((path, idx) => {
+          const styles = PRIORITY_STYLES[path.priority];
+          return (
+            <div key={idx} className={cn("p-4 border rounded-lg", styles.bg)}>
+              <div className="flex items-start gap-3">
+                <div
+                  className={cn(
+                    "w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5",
+                    styles.icon
+                  )}
+                >
+                  <GraduationCap className="w-3.5 h-3.5 text-neutral-0" />
+                </div>
+                <div>
+                  <p className={cn("text-[13px] font-semibold", styles.title)}>{path.label}</p>
+                  <p className={cn("text-[12px] mt-1 leading-relaxed", styles.text)}>{path.detail}</p>
+                </div>
               </div>
             </div>
-          ))}
-        </div>
-
-        <div className="mt-4 p-3 bg-teal-100 rounded-lg">
-          <p className="text-[13px] font-semibold text-teal-800">Recommended priority:</p>
-          <p className="text-[13px] text-teal-700 mt-1">{student.ccmrProjection.recommendation}</p>
-        </div>
+          );
+        })}
       </div>
     </div>
   );
 };
 
 // ============================================
-// MAIN STUDENT PROFILE COMPONENT
+// ACTIVE INTERVENTIONS
 // ============================================
 
-export const PathwaysStudentProfile = ({ student }: { student: StudentCCMRData }) => {
+const INTERVENTION_STATUS_CONFIG: Record<
+  InterventionStatus,
+  { label: string; className: string }
+> = {
+  recommended: { label: "Recommended", className: "bg-primary-100 text-primary-700" },
+  planned: { label: "Planned", className: "bg-primary-100 text-primary-700" },
+  in_progress: { label: "In progress", className: "bg-teal-100 text-teal-700" },
+  completed: { label: "Completed", className: "bg-teal-100 text-teal-700" },
+  expired: { label: "Expired", className: "bg-neutral-100 text-neutral-500" },
+  dismissed: { label: "Dismissed", className: "bg-neutral-100 text-neutral-500" },
+};
+
+const ActiveInterventions = ({ interventions }: { interventions: InterventionRow[] }) => {
+  const active = interventions.filter(
+    (i) => i.status !== "dismissed" && i.status !== "expired" && i.status !== "completed"
+  );
+
+  return (
+    <div className="bg-neutral-0 border border-neutral-200 rounded-lg p-6">
+      <h2 className="text-[18px] font-semibold text-neutral-900 mb-4">
+        Active interventions
+        {active.length > 0 && (
+          <span className="ml-2 px-2 py-0.5 bg-teal-100 text-teal-700 text-[12px] font-medium rounded-full">
+            {active.length}
+          </span>
+        )}
+      </h2>
+
+      {interventions.length === 0 ? (
+        <p className="text-[13px] text-neutral-500">No interventions recorded for this student.</p>
+      ) : (
+        <div className="space-y-3">
+          {interventions.map((intervention) => {
+            const statusConfig =
+              INTERVENTION_STATUS_CONFIG[intervention.status] ??
+              INTERVENTION_STATUS_CONFIG.recommended;
+            return (
+              <div
+                key={intervention.id}
+                className="border border-neutral-200 rounded-lg p-4 space-y-2"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <p className="text-[13px] font-semibold text-neutral-900">{intervention.title}</p>
+                  <span
+                    className={cn(
+                      "px-2 py-0.5 rounded-full text-[11px] font-medium flex-shrink-0",
+                      statusConfig.className
+                    )}
+                  >
+                    {statusConfig.label}
+                  </span>
+                </div>
+                {intervention.description && (
+                  <p className="text-[12px] text-neutral-600 leading-relaxed">
+                    {intervention.description}
+                  </p>
+                )}
+                <div className="flex flex-wrap items-center gap-3 pt-1">
+                  {intervention.pathway_type && (
+                    <span className="text-[11px] text-neutral-500">
+                      Pathway:{" "}
+                      <span className="font-medium text-neutral-700">
+                        {intervention.pathway_type.toUpperCase()}
+                      </span>
+                    </span>
+                  )}
+                  {intervention.due_date && (
+                    <span className="text-[11px] text-neutral-500">
+                      Due:{" "}
+                      <span className="font-medium text-neutral-700">
+                        {formatDate(intervention.due_date)}
+                      </span>
+                    </span>
+                  )}
+                  {intervention.assigned_to && (
+                    <span className="text-[11px] text-neutral-500">
+                      Assigned to:{" "}
+                      <span className="font-medium text-neutral-700">
+                        {intervention.assigned_to}
+                      </span>
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ============================================
+// STUDENT METADATA SIDEBAR
+// ============================================
+
+const MetadataItem = ({ label, value }: { label: string; value: string }) => (
+  <div>
+    <p className="text-[11px] text-neutral-500 uppercase tracking-wide font-medium mb-0.5">{label}</p>
+    <p className="text-[13px] text-neutral-900 font-medium">{value}</p>
+  </div>
+);
+
+const StudentMetadata = ({
+  student,
+  campusName,
+  graduationDate,
+}: {
+  student: StudentRow;
+  campusName: string;
+  graduationDate: string | null;
+}) => {
+  const meta = student.metadata as Record<string, unknown>;
+
+  const items: { label: string; value: string }[] = [
+    { label: "Campus", value: campusName },
+    { label: "Grade", value: String(student.grade_level) },
+    { label: "Graduation year", value: String(student.graduation_year) },
+  ];
+
+  if (graduationDate) {
+    items.push({ label: "Graduation date", value: formatDate(graduationDate) });
+    if (student.grade_level === 12) {
+      items.push({ label: "Days until graduation", value: `${daysUntil(graduationDate)} days` });
+    }
+  }
+  if (meta.gpa !== undefined) {
+    items.push({ label: "GPA", value: Number(meta.gpa).toFixed(2) });
+  }
+  if (meta.cte_pathway) {
+    items.push({ label: "CTE pathway", value: String(meta.cte_pathway) });
+  }
+  if (meta.cte_certification) {
+    items.push({ label: "CTE certification", value: String(meta.cte_certification) });
+  }
+  if (meta.cte_exam_date) {
+    items.push({ label: "CTE exam date", value: formatDate(String(meta.cte_exam_date)) });
+  }
+  if (student.ccmr_met_date) {
+    items.push({ label: "CCMR met date", value: formatDate(student.ccmr_met_date) });
+  }
+  if (student.ed_form_collected) {
+    items.push({
+      label: "Ed form",
+      value: student.ed_form_date ? `Collected ${formatDate(student.ed_form_date)}` : "Collected",
+    });
+  }
+
+  // Render any extra unknown metadata keys
+  const knownKeys = new Set(["cte_pathway", "cte_certification", "cte_exam_date", "gpa", "nearest_pathway"]);
+  const extraKeys = Object.keys(meta).filter((k) => !knownKeys.has(k));
+
+  return (
+    <div className="bg-neutral-0 border border-neutral-200 rounded-lg p-6">
+      <h2 className="text-[16px] font-semibold text-neutral-900 mb-4">Student info</h2>
+      <div className="space-y-3">
+        {items.map((item) => (
+          <MetadataItem key={item.label} label={item.label} value={item.value} />
+        ))}
+        {extraKeys.map((key) => (
+          <MetadataItem
+            key={key}
+            label={key.replace(/_/g, " ")}
+            value={String(meta[key])}
+          />
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// ============================================
+// MAIN COMPONENT
+// ============================================
+
+export interface StudentProfileProps {
+  student: StudentRow;
+  indicators: IndicatorRow[];
+  interventions: InterventionRow[];
+  campusName: string;
+  graduationDate: string | null;
+}
+
+export const PathwaysStudentProfile = ({
+  student,
+  indicators,
+  interventions,
+  campusName,
+  graduationDate,
+}: StudentProfileProps) => {
   return (
     <div className="space-y-6">
       {/* Back link */}
@@ -619,25 +689,31 @@ export const PathwaysStudentProfile = ({ student }: { student: StudentCCMRData }
         Back to Students
       </Link>
 
-      {/* Student Header */}
-      <StudentHeader student={student} />
+      {/* Header (includes alert banner) */}
+      <StudentHeader
+        student={student}
+        campusName={campusName}
+        graduationDate={graduationDate}
+      />
 
-      {/* Two column layout for main content */}
+      {/* Two-column layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left column: Indicator checklist (wider) */}
-        <div className="lg:col-span-2">
-          <CCMRIndicatorChecklist indicators={student.indicators} />
+        {/* Left: Indicator grid (wide) */}
+        <div className="lg:col-span-2 space-y-6">
+          <CCMRIndicatorGrid indicators={indicators} />
         </div>
 
-        {/* Right column: Interventions + Academic */}
+        {/* Right: Nearest pathway + interventions + metadata */}
         <div className="space-y-6">
-          <RecommendedInterventions student={student} />
-          <AcademicSnapshot student={student} />
+          <NearestPathwaySummary student={student} indicators={indicators} />
+          <ActiveInterventions interventions={interventions} />
+          <StudentMetadata
+            student={student}
+            campusName={campusName}
+            graduationDate={graduationDate}
+          />
         </div>
       </div>
-
-      {/* CCMR Pathway Planner (full width) */}
-      <CCMRPathwayPlanner student={student} />
     </div>
   );
 };
