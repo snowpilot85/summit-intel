@@ -2,7 +2,7 @@
 
 import { cookies } from "next/headers";
 import { createClient } from "@/utils/supabase/server";
-import { getAuthDistrictId } from "@/lib/db/users";
+import { getAuthContext } from "@/lib/db/users";
 import { createUpload, updateUploadStatus } from "@/lib/db/uploads";
 import { computeCCMRReadiness } from "@/lib/ccmr";
 import type {
@@ -80,13 +80,13 @@ export async function importRows(
 ): Promise<ImportResult> {
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
-  const districtId = await getAuthDistrictId(supabase);
+  const { districtId, queryClient } = await getAuthContext(supabase);
 
   const errors: string[] = [];
   let errored = 0;
 
   // ── Create upload record ────────────────────────────────────────────────────
-  const upload = await createUpload(supabase, {
+  const upload = await createUpload(queryClient, {
     district_id: districtId,
     file_name: fileName,
     source_type: sourceType,
@@ -111,7 +111,7 @@ export async function importRows(
     ),
   ];
 
-  const { data: existingCampuses } = await supabase
+  const { data: existingCampuses } = await queryClient
     .from("campuses")
     .select("id, name")
     .eq("district_id", districtId);
@@ -126,7 +126,7 @@ export async function importRows(
     (n) => !campusByName.has(n.toLowerCase())
   );
   if (missingCampusNames.length > 0) {
-    const { data: created, error: campusErr } = await supabase
+    const { data: created, error: campusErr } = await queryClient
       .from("campuses")
       .insert(
         missingCampusNames.map((name) => ({
@@ -153,7 +153,7 @@ export async function importRows(
   if (!fallbackCampusId) {
     const msg =
       "District has no campuses. Create at least one campus before importing students.";
-    await updateUploadStatus(supabase, upload.id, {
+    await updateUploadStatus(queryClient, upload.id, {
       status: "failed",
       error_log: [{ message: msg }],
       completed_at: new Date().toISOString(),
@@ -169,7 +169,7 @@ export async function importRows(
 
   // ── Phase 2: Batch-fetch existing students by TSDS ID ──────────────────────
   const tsdsIds = rows.map((r) => r.tsdsId).filter(Boolean);
-  const { data: existingStudents, error: studentErr } = await supabase
+  const { data: existingStudents, error: studentErr } = await queryClient
     .from("students")
     .select("id, tsds_id, grade_level")
     .eq("district_id", districtId)
@@ -177,7 +177,7 @@ export async function importRows(
     .in("tsds_id", tsdsIds);
 
   if (studentErr) {
-    await updateUploadStatus(supabase, upload.id, {
+    await updateUploadStatus(queryClient, upload.id, {
       status: "failed",
       error_log: [{ message: studentErr.message }],
       completed_at: new Date().toISOString(),
@@ -261,7 +261,7 @@ export async function importRows(
   const INSERT_CHUNK = 100;
   for (let i = 0; i < toCreate.length; i += INSERT_CHUNK) {
     const chunk = toCreate.slice(i, i + INSERT_CHUNK);
-    const { data: created, error: createErr } = await supabase
+    const { data: created, error: createErr } = await queryClient
       .from("students")
       .insert(chunk.map((c) => c.insert))
       .select("id, tsds_id, grade_level");
@@ -289,7 +289,7 @@ export async function importRows(
     const batch = toUpdateDemo.slice(i, i + DEMO_CHUNK);
     await Promise.all(
       batch.map(({ studentId, update }) =>
-        supabase.from("students").update(update).eq("id", studentId)
+        queryClient.from("students").update(update).eq("id", studentId)
       )
     );
   }
@@ -316,7 +316,7 @@ export async function importRows(
   const INDICATOR_CHUNK = 500;
   for (let i = 0; i < indicatorInserts.length; i += INDICATOR_CHUNK) {
     const chunk = indicatorInserts.slice(i, i + INDICATOR_CHUNK);
-    const { error: upsertErr } = await supabase
+    const { error: upsertErr } = await queryClient
       .from("ccmr_indicators")
       .upsert(chunk, { onConflict: "student_id,indicator_type" });
     if (upsertErr) {
@@ -328,7 +328,7 @@ export async function importRows(
   // ── Phase 7: Bulk readiness recompute ────────────────────────────────────
   const uniqueIds = [...new Set(processed.map((p) => p.studentId))];
   if (uniqueIds.length > 0) {
-    const { data: allIndicators } = await supabase
+    const { data: allIndicators } = await queryClient
       .from("ccmr_indicators")
       .select("student_id, indicator_type, status")
       .in("student_id", uniqueIds);
@@ -352,7 +352,7 @@ export async function importRows(
       const batch = readinessUpdates.slice(i, i + READINESS_CHUNK);
       await Promise.all(
         batch.map(({ id, ccmr_readiness, indicators_met_count }) =>
-          supabase
+          queryClient
             .from("students")
             .update({ ccmr_readiness, indicators_met_count })
             .eq("id", id)
@@ -364,7 +364,7 @@ export async function importRows(
   // ── Phase 8: Finalize ──────────────────────────────────────────────────────
   const imported = processed.length;
 
-  await updateUploadStatus(supabase, upload.id, {
+  await updateUploadStatus(queryClient, upload.id, {
     status: errored > 0 ? "completed_with_errors" : "completed",
     records_imported: imported,
     records_skipped: 0,

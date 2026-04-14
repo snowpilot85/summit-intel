@@ -2,13 +2,14 @@ import { Metadata } from "next";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
 import { PathwaysAppShell } from "@/components/pathways/app-shell";
 import { CampusReportsPage } from "@/components/pathways/campus-reports";
 import { getCampusSummaries, getCampuses } from "@/lib/db/campuses";
 import { getUserContext } from "@/lib/db/users";
 
 export const metadata: Metadata = {
-  title: "Campus Reports | Summit Pathways",
+  title: "Campus Reports | Summit Readiness",
   description: "CCMR breakdown by campus with action plans",
 };
 
@@ -23,10 +24,13 @@ export default async function Page() {
   if (!userCtx) redirect("/login");
 
   const { districtId, profile, districtName, schoolYearLabel } = userCtx;
+  if (!districtId) redirect("/pathways");
+  const isSuperAdmin = profile.role === "super_admin";
+  const queryClient = isSuperAdmin ? createAdminClient() : supabase;
 
   const [summaries, campuses] = await Promise.all([
-    getCampusSummaries(supabase, districtId),
-    getCampuses(supabase, districtId),
+    getCampusSummaries(queryClient, districtId),
+    getCampuses(queryClient, districtId),
   ]);
 
   // The view groups by graduation_year — keep only the current (max) year so
@@ -45,10 +49,11 @@ export default async function Page() {
         notificationCount: 0,
       }}
       breadcrumbs={[
-        { label: "Summit Pathways", href: "/pathways" },
+        { label: "Summit Readiness", href: "/pathways" },
         { label: "Campus Reports" },
       ]}
       activeNavItem="campus-reports"
+      isSuperAdmin={isSuperAdmin}
     >
       <CampusReportsPage summaries={currentSummaries} campuses={campuses} />
     </PathwaysAppShell>

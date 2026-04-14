@@ -28,7 +28,7 @@ import type {
 } from "@/types/database";
 
 /* ============================================
-   Summit Pathways — Student Profile
+   Summit Readiness — Student Profile
    ============================================ */
 
 // ============================================

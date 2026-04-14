@@ -18,7 +18,7 @@ import { fetchStudentPage, type StudentFilters } from "@/app/pathways/students/a
 import type { CampusRow, CCMRReadiness, IndicatorRow, IndicatorType, StudentRow } from "@/types/database";
 
 /* ============================================
-   Summit Pathways Students Page
+   Summit Readiness Students Page
    ============================================ */
 
 const PAGE_SIZE = 50;

@@ -49,7 +49,7 @@ export type UploadSourceType =
 
 export type UploadStatus = 'processing' | 'completed' | 'completed_with_errors' | 'failed'
 
-export type UserRole = 'district_admin' | 'campus_admin' | 'counselor' | 'viewer'
+export type UserRole = 'district_admin' | 'campus_admin' | 'counselor' | 'viewer' | 'super_admin'
 
 // ============================================================
 // ROW TYPES — exported for use throughout the app
@@ -166,7 +166,7 @@ export type DataUploadRow = {
 
 export type UserProfileRow = {
   id: string
-  district_id: string
+  district_id: string | null   // null for super_admin users not tied to a district
   campus_id: string | null
   full_name: string
   role: UserRole

@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
 import { PathwaysAppShell } from "@/components/pathways/app-shell";
 import { PathwaysStudentProfile } from "@/components/pathways/student-profile";
 import { getStudentById } from "@/lib/db/students";
@@ -24,16 +25,19 @@ export default async function PathwaysStudentProfilePage({
   if (!userCtx) redirect("/login");
 
   const { districtId, profile, districtName, schoolYearLabel, graduationDate } = userCtx;
+  if (!districtId) redirect("/pathways");
+  const isSuperAdmin = profile.role === "super_admin";
+  const queryClient = isSuperAdmin ? createAdminClient() : supabase;
 
   const [student, indicators, interventions] = await Promise.all([
-    getStudentById(supabase, id),
-    getStudentIndicators(supabase, id),
-    getInterventions(supabase, districtId, { studentId: id }),
+    getStudentById(queryClient, id),
+    getStudentIndicators(queryClient, id),
+    getInterventions(queryClient, districtId, { studentId: id }),
   ]);
 
   if (!student) notFound();
 
-  const { data: campus } = await supabase
+  const { data: campus } = await queryClient
     .from("campuses")
     .select("name")
     .eq("id", student.campus_id)
@@ -52,11 +56,12 @@ export default async function PathwaysStudentProfilePage({
         notificationCount: 0,
       }}
       breadcrumbs={[
-        { label: "Summit Pathways", href: "/pathways" },
+        { label: "Summit Readiness", href: "/pathways" },
         { label: "Students", href: "/pathways/students" },
         { label: studentName },
       ]}
       activeNavItem="students"
+      isSuperAdmin={isSuperAdmin}
     >
       <PathwaysStudentProfile
         student={student}

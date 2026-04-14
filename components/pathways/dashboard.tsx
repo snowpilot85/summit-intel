@@ -24,7 +24,7 @@ import type {
 import type { CampusCCMRSummaryRow, SnapshotRow, IndicatorType } from "@/types/database";
 
 /* ============================================
-   Summit Pathways Dashboard
+   Summit Readiness Dashboard
    District-wide CCMR Overview
    ============================================ */
 

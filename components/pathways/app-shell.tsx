@@ -19,13 +19,15 @@ import {
   ChevronDown,
   Menu,
   X,
-  Grid3X3,
   GraduationCap,
   Gauge,
+  Shield,
+  ArrowLeftRight,
 } from "lucide-react";
+import { clearDistrict } from "@/app/pathways/actions";
 
 /* ============================================
-   Summit Intel App Shell Components
+   Summit Readiness App Shell Components
    College, Career & Military Readiness Platform
    ============================================ */
 
@@ -39,6 +41,7 @@ interface PathwaysHeaderProps {
   districtName?: string;
   schoolYear?: string;
   notificationCount?: number;
+  isSuperAdmin?: boolean;
 }
 
 export const PathwaysHeader = ({
@@ -47,11 +50,11 @@ export const PathwaysHeader = ({
   districtName = "",
   schoolYear = "2025-26",
   notificationCount = 0,
+  isSuperAdmin = false,
 }: PathwaysHeaderProps) => {
   const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = React.useState(false);
-  const [productMenuOpen, setProductMenuOpen] = React.useState(false);
 
   async function handleSignOut() {
     const supabase = createClient();
@@ -74,7 +77,7 @@ export const PathwaysHeader = ({
               {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
             
-            {/* Summit K12 Intel Logo with subtitle */}
+            {/* Summit Readiness Logo with subtitle */}
             <div className="flex flex-col">
               <div className="flex items-center gap-2">
                 <Image
@@ -85,7 +88,7 @@ export const PathwaysHeader = ({
                   className="h-7 w-auto flex-shrink-0"
                   priority
                 />
-                <span className="text-[20px] font-semibold text-teal-300">Intel</span>
+                <span className="text-[20px] font-semibold text-teal-300">Readiness</span>
               </div>
               <p className="text-[11px] opacity-70 mt-1 tracking-wide">College, Career & Military Readiness</p>
             </div>
@@ -101,65 +104,15 @@ export const PathwaysHeader = ({
               <span className="text-[13px] font-medium">{districtName}</span>
               <span className="text-[11px] opacity-70">|</span>
               <span className="text-[12px] opacity-90">{schoolYear}</span>
-            </div>
-
-            {/* Product switcher */}
-            <div className="relative">
-              <button
-                onClick={() => setProductMenuOpen(!productMenuOpen)}
-                className="p-2 rounded-md hover:bg-primary-600 transition-colors"
-                aria-label="Switch products"
-                aria-expanded={productMenuOpen}
-                aria-haspopup="true"
-              >
-                <Grid3X3 className="w-5 h-5" />
-              </button>
-
-              {productMenuOpen && (
-                <div className="absolute right-0 top-full mt-2 w-56 bg-neutral-0 rounded-lg shadow-lg border border-neutral-200 py-2 z-50">
-                  <p className="px-4 py-2 text-[11px] font-semibold text-neutral-500 uppercase tracking-wider">
-                    Summit K12 Products
-                  </p>
-                  <Link
-                    href="/"
-                    onClick={() => setProductMenuOpen(false)}
-                    className="flex items-center gap-3 px-4 py-3 hover:bg-neutral-50 transition-colors"
-                  >
-                    <div className="w-8 h-8 bg-primary-100 rounded-md flex items-center justify-center">
-                      <LayoutDashboard className="w-4 h-4 text-primary-600" />
-                    </div>
-                    <div>
-                      <p className="text-[14px] font-medium text-neutral-900">DSM Dashboard</p>
-                      <p className="text-[12px] text-neutral-500">District Success Team</p>
-                    </div>
-                  </Link>
-                  <Link
-                    href="/intel"
-                    onClick={() => setProductMenuOpen(false)}
-                    className="flex items-center gap-3 px-4 py-3 hover:bg-neutral-50 transition-colors"
-                  >
-                    <div className="w-8 h-8 bg-teal-100 rounded-md flex items-center justify-center">
-                      <Building2 className="w-4 h-4 text-teal-600" />
-                    </div>
-                    <div>
-                      <p className="text-[14px] font-medium text-neutral-900">Summit K12 IntELL</p>
-                      <p className="text-[12px] text-neutral-500">EL Compliance & Instruction</p>
-                    </div>
-                  </Link>
-                  <Link
-                    href="/pathways"
-                    onClick={() => setProductMenuOpen(false)}
-                    className="flex items-center gap-3 px-4 py-3 hover:bg-neutral-50 transition-colors bg-neutral-50"
-                  >
-                    <div className="w-8 h-8 bg-teal-100 rounded-md flex items-center justify-center">
-                      <GraduationCap className="w-4 h-4 text-teal-600" />
-                    </div>
-                    <div>
-                      <p className="text-[14px] font-medium text-neutral-900">Summit Intel</p>
-                      <p className="text-[12px] text-neutral-500">College, Career & Military Readiness</p>
-                    </div>
-                  </Link>
-                </div>
+              {isSuperAdmin && (
+                <button
+                  onClick={() => clearDistrict()}
+                  title="Switch district"
+                  className="ml-1 p-0.5 rounded hover:bg-primary-500 transition-colors"
+                  aria-label="Switch district"
+                >
+                  <ArrowLeftRight className="w-3.5 h-3.5 opacity-70 hover:opacity-100" />
+                </button>
               )}
             </div>
 
@@ -310,10 +263,18 @@ const pathwaysNavItems = [
 interface NavRailProps {
   activeItem?: string;
   onItemChange?: (item: string) => void;
+  isSuperAdmin?: boolean;
   className?: string;
 }
 
-export const PathwaysNavRail = ({ activeItem = "dashboard", onItemChange, className }: NavRailProps) => {
+export const PathwaysNavRail = ({ activeItem = "dashboard", onItemChange, isSuperAdmin, className }: NavRailProps) => {
+  const navItems = [
+    ...pathwaysNavItems,
+    ...(isSuperAdmin
+      ? [{ id: "admin-setup", label: "Admin Setup", icon: Shield, href: "/admin/setup" }]
+      : []),
+  ];
+
   return (
     <aside
       className={cn(
@@ -324,10 +285,10 @@ export const PathwaysNavRail = ({ activeItem = "dashboard", onItemChange, classN
       aria-label="Side navigation"
     >
       <nav className="flex flex-col py-4">
-        {pathwaysNavItems.map((item) => {
+        {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeItem === item.id;
-          
+
           return (
             <Link
               key={item.id}
@@ -361,22 +322,24 @@ interface PathwaysAppShellProps {
   breadcrumbs?: BreadcrumbItem[];
   activeNavItem?: string;
   onNavItemChange?: (item: string) => void;
+  isSuperAdmin?: boolean;
 }
 
 export const PathwaysAppShell = ({
   children,
   headerProps,
   breadcrumbs = [
-    { label: "Summit Intel", href: "/pathways" },
+    { label: "Summit Readiness", href: "/pathways" },
     { label: "Dashboard" },
   ],
   activeNavItem = "dashboard",
   onNavItemChange,
+  isSuperAdmin,
 }: PathwaysAppShellProps) => {
   return (
     <div className="min-h-screen flex flex-col bg-neutral-50">
       {/* Header */}
-      <PathwaysHeader {...headerProps} />
+      <PathwaysHeader {...headerProps} isSuperAdmin={isSuperAdmin} />
 
       {/* Breadcrumbs */}
       <PathwaysBreadcrumbs items={breadcrumbs} />
@@ -384,7 +347,7 @@ export const PathwaysAppShell = ({
       {/* Main Layout */}
       <div className="flex flex-1">
         {/* Nav Rail */}
-        <PathwaysNavRail activeItem={activeNavItem} onItemChange={onNavItemChange} />
+        <PathwaysNavRail activeItem={activeNavItem} onItemChange={onNavItemChange} isSuperAdmin={isSuperAdmin} />
 
         {/* Main Content */}
         <main className="flex-1 p-4 lg:p-6 pb-20 lg:pb-6">

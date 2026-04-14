@@ -2,7 +2,7 @@
 
 import { cookies } from "next/headers";
 import { createClient } from "@/utils/supabase/server";
-import { getAuthDistrictId } from "@/lib/db/users";
+import { getAuthContext } from "@/lib/db/users";
 import { getStudents } from "@/lib/db/students";
 import { getIndicatorsForStudents } from "@/lib/db/indicators";
 import type { CCMRReadiness, IndicatorRow, StudentRow } from "@/types/database";
@@ -32,15 +32,15 @@ export async function fetchStudentPage(
 ): Promise<StudentPageData> {
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
-  const districtId = await getAuthDistrictId(supabase);
+  const { districtId, queryClient } = await getAuthContext(supabase);
 
-  const { data: students, count } = await getStudents(supabase, districtId, {
+  const { data: students, count } = await getStudents(queryClient, districtId, {
     ...filters,
     pageSize: PAGE_SIZE,
   });
 
   const studentIds = students.map((s) => s.id);
-  const indicators = await getIndicatorsForStudents(supabase, studentIds);
+  const indicators = await getIndicatorsForStudents(queryClient, studentIds);
 
   return { students, count, indicators };
 }

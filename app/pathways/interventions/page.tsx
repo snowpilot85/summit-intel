@@ -2,6 +2,7 @@ import { Metadata } from "next";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
 import { PathwaysAppShell } from "@/components/pathways/app-shell";
 import { InterventionsPage } from "@/components/pathways/interventions";
 import { getInterventions } from "@/lib/db/interventions";
@@ -10,7 +11,7 @@ import { getCampuses } from "@/lib/db/campuses";
 import { getUserContext } from "@/lib/db/users";
 
 export const metadata: Metadata = {
-  title: "Interventions | Summit Pathways",
+  title: "Interventions | Summit Readiness",
   description: "CCMR intervention pathways sorted by potential impact",
 };
 
@@ -25,11 +26,14 @@ export default async function Page() {
   if (!userCtx) redirect("/login");
 
   const { districtId, profile, districtName, schoolYearLabel } = userCtx;
+  if (!districtId) redirect("/pathways");
+  const isSuperAdmin = profile.role === "super_admin";
+  const queryClient = isSuperAdmin ? createAdminClient() : supabase;
 
   const [interventions, campuses, seniorCountResult] = await Promise.all([
-    getInterventions(supabase, districtId),
-    getCampuses(supabase, districtId),
-    supabase
+    getInterventions(queryClient, districtId),
+    getCampuses(queryClient, districtId),
+    queryClient
       .from("students")
       .select("*", { count: "exact", head: true })
       .eq("district_id", districtId)
@@ -44,7 +48,7 @@ export default async function Page() {
   );
 
   const studentIds = [...new Set(activeInterventions.map((i) => i.student_id))];
-  const students = await getStudentsByIds(supabase, studentIds);
+  const students = await getStudentsByIds(queryClient, studentIds);
 
   const seniorCount = seniorCountResult.count ?? 0;
 
@@ -58,10 +62,11 @@ export default async function Page() {
         notificationCount: 0,
       }}
       breadcrumbs={[
-        { label: "Summit Pathways", href: "/pathways" },
+        { label: "Summit Readiness", href: "/pathways" },
         { label: "Interventions" },
       ]}
       activeNavItem="interventions"
+      isSuperAdmin={isSuperAdmin}
     >
       <InterventionsPage
         interventions={activeInterventions}

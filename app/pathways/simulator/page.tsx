@@ -14,7 +14,7 @@ export default function SimulatorPage() {
         notificationCount: 3,
       }}
       breadcrumbs={[
-        { label: "Summit Pathways", href: "/pathways" },
+        { label: "Summit Readiness", href: "/pathways" },
         { label: "A-F Simulator" },
       ]}
       activeNavItem="simulator"

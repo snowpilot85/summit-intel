@@ -1,8 +1,10 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
 import { PathwaysAppShell } from "@/components/pathways/app-shell";
 import { PathwaysDashboard } from "@/components/pathways/dashboard";
+import { DistrictPicker } from "@/components/pathways/district-picker";
 import { getDashboardSummary, getIndicatorBreakdown } from "@/lib/db/dashboard";
 import { getCampusSummaries } from "@/lib/db/campuses";
 import { getAnnualSnapshots } from "@/lib/db/snapshots";
@@ -18,13 +20,39 @@ export default async function PathwaysDashboardPage() {
   const userCtx = await getUserContext(supabase);
   if (!userCtx) redirect("/login");
 
-  const { districtId, profile, districtName, schoolYearLabel } = userCtx;
+  const { profile } = userCtx;
+  const isSuperAdmin = profile.role === "super_admin";
+
+  // super_admin with no district selected (no cookie set) → show district picker
+  if (isSuperAdmin && !userCtx.districtId) {
+    const admin = createAdminClient();
+    const { data: districts } = await admin
+      .from("districts")
+      .select("id, name, tea_district_id, esc_region")
+      .order("name");
+
+    return (
+      <DistrictPicker
+        districts={districts ?? []}
+        userName={profile.full_name}
+      />
+    );
+  }
+
+  const districtId = userCtx.districtId;
+  if (!districtId) redirect("/login");
+
+  // super_admin → bypass RLS with admin client
+  const queryClient = isSuperAdmin ? createAdminClient() : supabase;
+
+  const districtName = userCtx.districtName;
+  const schoolYearLabel = userCtx.schoolYearLabel;
 
   const [summary, campusSummaries, snapshots, indicators] = await Promise.all([
-    getDashboardSummary(supabase, districtId, "all"),
-    getCampusSummaries(supabase, districtId),
-    getAnnualSnapshots(supabase, districtId),
-    getIndicatorBreakdown(supabase, districtId),
+    getDashboardSummary(queryClient, districtId, "all"),
+    getCampusSummaries(queryClient, districtId),
+    getAnnualSnapshots(queryClient, districtId),
+    getIndicatorBreakdown(queryClient, districtId),
   ]);
 
   return (
@@ -37,10 +65,11 @@ export default async function PathwaysDashboardPage() {
         notificationCount: 0,
       }}
       breadcrumbs={[
-        { label: "Summit Pathways", href: "/pathways" },
+        { label: "Summit Readiness", href: "/pathways" },
         { label: "Dashboard" },
       ]}
       activeNavItem="dashboard"
+      isSuperAdmin={isSuperAdmin}
     >
       <PathwaysDashboard
         districtId={districtId}

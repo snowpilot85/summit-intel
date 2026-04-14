@@ -47,7 +47,7 @@ export default function LoginPage() {
               className="h-8 w-auto"
               priority
             />
-            <span className="text-[22px] font-semibold text-teal-300">Intel</span>
+            <span className="text-[22px] font-semibold text-teal-300">Readiness</span>
           </div>
           <p className="text-[13px] text-white/70 tracking-wide">
             College, Career &amp; Military Readiness

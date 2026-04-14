@@ -2,13 +2,14 @@ import { Metadata } from "next";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
 import { PathwaysAppShell } from "@/components/pathways/app-shell";
 import { DataUploadPage } from "@/components/pathways/data-upload";
 import { getUserContext } from "@/lib/db/users";
 import type { DataUploadRow } from "@/types/database";
 
 export const metadata: Metadata = {
-  title: "Data Upload | Summit Pathways",
+  title: "Data Upload | Summit Readiness",
   description: "Upload CCMR tracker files and student data",
 };
 
@@ -23,8 +24,11 @@ export default async function Page() {
   if (!userCtx) redirect("/login");
 
   const { districtId, profile, districtName, schoolYearLabel } = userCtx;
+  if (!districtId) redirect("/pathways");
+  const isSuperAdmin = profile.role === "super_admin";
+  const queryClient = isSuperAdmin ? createAdminClient() : supabase;
 
-  const { data: uploads } = await supabase
+  const { data: uploads } = await queryClient
     .from("data_uploads")
     .select("*")
     .eq("district_id", districtId)
@@ -41,10 +45,11 @@ export default async function Page() {
         notificationCount: 0,
       }}
       breadcrumbs={[
-        { label: "Summit Pathways", href: "/pathways" },
+        { label: "Summit Readiness", href: "/pathways" },
         { label: "Data Upload" },
       ]}
       activeNavItem="data-upload"
+      isSuperAdmin={isSuperAdmin}
     >
       <DataUploadPage
         districtId={districtId}
