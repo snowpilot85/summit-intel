@@ -1,0 +1,343 @@
+import type { SupabaseClient } from '@supabase/supabase-js'
+
+// ============================================================
+// STRING LITERAL UNIONS (mirrors DB CHECK constraints)
+// ============================================================
+
+export type CCMRReadiness = 'met' | 'on_track' | 'almost' | 'at_risk' | 'too_early'
+
+export type IndicatorType =
+  | 'tsi_reading'
+  | 'tsi_math'
+  | 'sat_reading'
+  | 'sat_math'
+  | 'act_reading'
+  | 'act_math'
+  | 'college_prep_ela'
+  | 'college_prep_math'
+  | 'ap_exam'
+  | 'ib_exam'
+  | 'dual_credit_ela'
+  | 'dual_credit_math'
+  | 'dual_credit_any'
+  | 'onramps'
+  | 'ibc'
+  | 'associate_degree'
+  | 'level_i_ii_certificate'
+  | 'military_enlistment'
+  | 'iep_completion'
+  | 'sped_advanced_degree'
+
+export type IndicatorStatus = 'met' | 'in_progress' | 'not_attempted' | 'not_met'
+
+export type InterventionStatus =
+  | 'recommended'
+  | 'planned'
+  | 'in_progress'
+  | 'completed'
+  | 'expired'
+  | 'dismissed'
+
+export type UploadSourceType =
+  | 'region_13_tracker'
+  | 'tea_ccmr_tracker'
+  | 'sat_act_scores'
+  | 'tsia_results'
+  | 'cte_ibc_data'
+  | 'dual_credit_transcripts'
+  | 'custom_csv'
+
+export type UploadStatus = 'processing' | 'completed' | 'completed_with_errors' | 'failed'
+
+export type UserRole = 'district_admin' | 'campus_admin' | 'counselor' | 'viewer'
+
+// ============================================================
+// ROW TYPES — exported for use throughout the app
+// ============================================================
+
+export type DistrictRow = {
+  id: string
+  name: string
+  tea_district_id: string | null
+  esc_region: number | null
+  state_avg_ccmr_rate: number | null
+  settings: Record<string, unknown>
+  created_at: string
+  updated_at: string
+}
+
+export type CampusRow = {
+  id: string
+  district_id: string
+  name: string
+  tea_campus_id: string | null
+  metadata: Record<string, unknown>
+  created_at: string
+  updated_at: string
+}
+
+export type SchoolYearRow = {
+  id: string
+  district_id: string
+  label: string
+  start_date: string
+  end_date: string
+  is_current: boolean
+  graduation_date: string | null
+  created_at: string
+}
+
+export type StudentRow = {
+  id: string
+  district_id: string
+  campus_id: string
+  tsds_id: string
+  first_name: string
+  last_name: string
+  grade_level: number
+  graduation_year: number
+  is_eb: boolean
+  is_econ_disadvantaged: boolean
+  is_special_ed: boolean
+  is_504: boolean
+  ed_form_collected: boolean
+  ed_form_date: string | null
+  ccmr_readiness: CCMRReadiness
+  ccmr_met_date: string | null
+  indicators_met_count: number
+  metadata: Record<string, unknown>
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export type IndicatorRow = {
+  id: string
+  student_id: string
+  indicator_type: IndicatorType
+  status: IndicatorStatus
+  met_date: string | null
+  score: number | null
+  threshold: number | null
+  course_grade: string | null
+  exam_date: string | null
+  source_year: string | null
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type InterventionRow = {
+  id: string
+  student_id: string
+  campus_id: string
+  pathway_type: string | null
+  title: string
+  description: string | null
+  status: InterventionStatus
+  priority: number
+  due_date: string | null
+  completed_date: string | null
+  assigned_to: string | null
+  projected_ccmr_impact: number | null
+  notes: string | null
+  metadata: Record<string, unknown>
+  created_at: string
+  updated_at: string
+}
+
+export type DataUploadRow = {
+  id: string
+  district_id: string
+  school_year_id: string | null
+  file_name: string
+  source_type: UploadSourceType
+  status: UploadStatus
+  records_total: number
+  records_imported: number
+  records_skipped: number
+  records_errored: number
+  column_mapping: Record<string, unknown> | null
+  error_log: Record<string, unknown>[] | null
+  uploaded_by: string | null
+  created_at: string
+  completed_at: string | null
+}
+
+export type UserProfileRow = {
+  id: string
+  district_id: string
+  campus_id: string | null
+  full_name: string
+  role: UserRole
+  created_at: string
+  updated_at: string
+}
+
+export type SnapshotRow = {
+  id: string
+  district_id: string
+  campus_id: string | null
+  graduation_year: number
+  total_graduates: number
+  ccmr_met_count: number
+  ccmr_rate: number
+  state_avg_rate: number | null
+  eb_total: number
+  eb_met_count: number
+  eb_rate: number | null
+  econ_disadv_total: number
+  econ_disadv_met: number
+  econ_disadv_rate: number | null
+  sped_total: number
+  sped_met_count: number
+  sped_rate: number | null
+  indicator_breakdown: Record<string, number>
+  created_at: string
+}
+
+export type CampusCCMRSummaryRow = {
+  district_id: string
+  campus_id: string
+  campus_name: string
+  graduation_year: number
+  total_seniors: number
+  ccmr_met: number
+  at_risk: number
+  almost: number
+  ccmr_rate: number
+  eb_total: number
+  eb_met: number
+  eb_rate: number | null
+  econ_total: number
+  econ_met: number
+  missing_ed_forms: number
+}
+
+export type IndicatorBreakdownRow = {
+  district_id: string
+  graduation_year: number
+  indicator_type: IndicatorType
+  student_count: number
+}
+
+// ============================================================
+// INSERT / UPDATE TYPES
+// ============================================================
+
+export type DistrictInsert = Omit<DistrictRow, 'id' | 'created_at' | 'updated_at'> & { id?: string }
+export type DistrictUpdate = Partial<DistrictInsert>
+
+export type CampusInsert = Omit<CampusRow, 'id' | 'created_at' | 'updated_at'> & { id?: string }
+export type CampusUpdate = Partial<CampusInsert>
+
+export type SchoolYearInsert = Omit<SchoolYearRow, 'id' | 'created_at'> & { id?: string }
+export type SchoolYearUpdate = Partial<SchoolYearInsert>
+
+export type StudentInsert = Omit<StudentRow, 'id' | 'created_at' | 'updated_at'> & { id?: string }
+export type StudentUpdate = Partial<StudentInsert>
+
+export type IndicatorInsert = Omit<IndicatorRow, 'id' | 'created_at' | 'updated_at'> & { id?: string }
+export type IndicatorUpdate = Partial<IndicatorInsert>
+
+export type InterventionInsert = Omit<InterventionRow, 'id' | 'created_at' | 'updated_at'> & { id?: string }
+export type InterventionUpdate = Partial<InterventionInsert>
+
+export type DataUploadInsert = Omit<DataUploadRow, 'id' | 'created_at'> & { id?: string }
+export type DataUploadUpdate = Partial<DataUploadInsert>
+
+export type UserProfileInsert = Omit<UserProfileRow, 'created_at' | 'updated_at'>
+export type UserProfileUpdate = Partial<UserProfileInsert>
+
+// ============================================================
+// DATABASE TYPE — generic for SupabaseClient<Database>
+//
+// Row types in this interface use `& Record<string, unknown>` so that
+// they satisfy Supabase's internal GenericTable constraint, which checks
+// `Row extends Record<string, unknown>` via a conditional type. Plain
+// TypeScript object types without an explicit index signature fail that
+// check, even though all their property types extend `unknown`.
+// The exported Row/Insert/Update types above remain clean for app use.
+// ============================================================
+
+type Indexed<T> = T & Record<string, unknown>
+
+export interface Database {
+  public: {
+    Tables: {
+      districts: {
+        Row: Indexed<DistrictRow>
+        Insert: DistrictInsert
+        Update: DistrictUpdate
+        Relationships: []
+      }
+      campuses: {
+        Row: Indexed<CampusRow>
+        Insert: CampusInsert
+        Update: CampusUpdate
+        Relationships: []
+      }
+      school_years: {
+        Row: Indexed<SchoolYearRow>
+        Insert: SchoolYearInsert
+        Update: SchoolYearUpdate
+        Relationships: []
+      }
+      students: {
+        Row: Indexed<StudentRow>
+        Insert: StudentInsert
+        Update: StudentUpdate
+        Relationships: []
+      }
+      ccmr_indicators: {
+        Row: Indexed<IndicatorRow>
+        Insert: IndicatorInsert
+        Update: IndicatorUpdate
+        Relationships: []
+      }
+      interventions: {
+        Row: Indexed<InterventionRow>
+        Insert: InterventionInsert
+        Update: InterventionUpdate
+        Relationships: []
+      }
+      data_uploads: {
+        Row: Indexed<DataUploadRow>
+        Insert: DataUploadInsert
+        Update: DataUploadUpdate
+        Relationships: []
+      }
+      user_profiles: {
+        Row: Indexed<UserProfileRow>
+        Insert: UserProfileInsert
+        Update: UserProfileUpdate
+        Relationships: []
+      }
+      ccmr_annual_snapshots: {
+        Row: Indexed<SnapshotRow>
+        Insert: Omit<SnapshotRow, 'id' | 'created_at'> & { id?: string }
+        Update: Partial<Omit<SnapshotRow, 'id' | 'created_at'>>
+        Relationships: []
+      }
+    }
+    Views: {
+      v_campus_ccmr_summary: {
+        Row: Indexed<CampusCCMRSummaryRow>
+        Relationships: []
+      }
+      v_indicator_breakdown: {
+        Row: Indexed<IndicatorBreakdownRow>
+        Relationships: []
+      }
+    }
+    Functions: {
+      [_ in never]: never
+    }
+    Enums: {
+      [_ in never]: never
+    }
+  }
+}
+
+// Typed Supabase client — first param in every query function
+export type TypedSupabaseClient = SupabaseClient<Database>
