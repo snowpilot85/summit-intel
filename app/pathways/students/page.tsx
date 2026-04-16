@@ -8,10 +8,13 @@ import { getStudents } from "@/lib/db/students";
 import { getIndicatorsForStudents } from "@/lib/db/indicators";
 import { getCampuses } from "@/lib/db/campuses";
 import { getUserContext } from "@/lib/db/users";
+import type { StudentPathwayEntry } from "@/app/pathways/students/actions";
 
 function formatRole(role: string): string {
   return role.split("_").map((w) => w[0].toUpperCase() + w.slice(1)).join(" ");
 }
+
+export type CareerClusterOption = { id: string; code: string; name: string };
 
 export default async function PathwaysStudentsPage() {
   const cookieStore = await cookies();
@@ -24,10 +27,27 @@ export default async function PathwaysStudentsPage() {
   const isSuperAdmin = profile.role === "super_admin";
   const queryClient = isSuperAdmin ? createAdminClient() : supabase;
 
-  const [{ data: students, count }, campuses] = await Promise.all([
+  // Resolve district → state_id so we can load the right career clusters
+  const { data: districtRow } = await queryClient
+    .from("districts")
+    .select("state_id")
+    .eq("id", districtId)
+    .single();
+  const stateId = districtRow?.state_id ?? null;
+
+  const [{ data: students, count }, campuses, careerClustersResult] = await Promise.all([
     getStudents(queryClient, districtId, { pageSize: 50 }),
     getCampuses(queryClient, districtId),
+    stateId
+      ? queryClient
+          .from("state_career_clusters")
+          .select("id, code, name")
+          .eq("state_id", stateId)
+          .order("name")
+      : Promise.resolve({ data: [] }),
   ]);
+
+  const careerClusters: CareerClusterOption[] = (careerClustersResult.data ?? []) as CareerClusterOption[];
 
   const studentIds = students.map((s) => s.id);
   const [indicators, pathwayRows] = await Promise.all([
@@ -35,18 +55,20 @@ export default async function PathwaysStudentsPage() {
     studentIds.length > 0
       ? queryClient
           .from("student_pathways")
-          .select("student_id, state_career_clusters(name, code)")
+          .select("student_id, credential_earned, enrollment_status, state_career_clusters(name, code)")
           .in("student_id", studentIds)
       : Promise.resolve({ data: [] }),
   ]);
 
   type ClusterShape = { name: string; code: string };
-  const initialClusters = (pathwayRows.data ?? []).map((r) => {
+  const initialPathways: StudentPathwayEntry[] = (pathwayRows.data ?? []).map((r) => {
     const c = r.state_career_clusters as unknown as ClusterShape | null;
     return {
       student_id: r.student_id,
       cluster_name: c?.name ?? "",
       cluster_code: c?.code ?? "",
+      credential_earned: r.credential_earned ?? false,
+      enrollment_status: r.enrollment_status ?? "",
     };
   });
 
@@ -71,8 +93,9 @@ export default async function PathwaysStudentsPage() {
         initialStudents={students}
         initialCount={count}
         initialIndicators={indicators}
-        initialClusters={initialClusters}
+        initialPathways={initialPathways}
         campuses={campuses}
+        careerClusters={careerClusters}
         graduationDate={graduationDate}
       />
     </PathwaysAppShell>

@@ -450,6 +450,34 @@ export type StudentPathwayUpdate = Partial<StudentPathwayInsert>
 export type LaborMarketDataInsert = Omit<LaborMarketDataRow, 'id' | 'created_at' | 'updated_at'> & { id?: string }
 export type LaborMarketDataUpdate = Partial<LaborMarketDataInsert>
 
+export type WblActivityType =
+  | 'internship'
+  | 'job_shadow'
+  | 'apprenticeship'
+  | 'clinical'
+  | 'cooperative_education'
+  | 'other'
+
+export type WorkBasedLearningRow = {
+  id: string
+  student_id: string
+  district_id: string
+  activity_type: WblActivityType
+  employer_name: string
+  supervisor_name: string | null
+  start_date: string
+  end_date: string | null
+  hours_completed: number
+  is_paid: boolean
+  notes: string | null
+  metadata: Record<string, unknown>
+  created_at: string
+  updated_at: string
+}
+
+export type WorkBasedLearningInsert = Omit<WorkBasedLearningRow, 'id' | 'created_at' | 'updated_at'> & { id?: string }
+export type WorkBasedLearningUpdate = Partial<WorkBasedLearningInsert>
+
 // ============================================================
 // DATABASE TYPE — generic for SupabaseClient<Database>
 //
@@ -578,6 +606,12 @@ export interface Database {
         Row: Indexed<LaborMarketDataRow>
         Insert: LaborMarketDataInsert
         Update: LaborMarketDataUpdate
+        Relationships: []
+      }
+      work_based_learning: {
+        Row: Indexed<WorkBasedLearningRow>
+        Insert: WorkBasedLearningInsert
+        Update: WorkBasedLearningUpdate
         Relationships: []
       }
     }

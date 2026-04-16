@@ -5,7 +5,7 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import { PathwaysAppShell } from "@/components/pathways/app-shell";
 import { PathwaysDashboard } from "@/components/pathways/dashboard";
 import { DistrictPicker } from "@/components/pathways/district-picker";
-import { getDashboardSummary, getIndicatorBreakdown } from "@/lib/db/dashboard";
+import { getDashboardSummary, getIndicatorBreakdown, getPathwayMetrics } from "@/lib/db/dashboard";
 import { getCampusSummaries } from "@/lib/db/campuses";
 import { getAnnualSnapshots } from "@/lib/db/snapshots";
 import { getUserContext } from "@/lib/db/users";
@@ -48,11 +48,12 @@ export default async function PathwaysDashboardPage() {
   const districtName = userCtx.districtName;
   const schoolYearLabel = userCtx.schoolYearLabel;
 
-  const [summary, campusSummaries, snapshots, indicators] = await Promise.all([
+  const [summary, campusSummaries, snapshots, indicators, pathwayMetrics] = await Promise.all([
     getDashboardSummary(queryClient, districtId, "all"),
     getCampusSummaries(queryClient, districtId),
     getAnnualSnapshots(queryClient, districtId),
     getIndicatorBreakdown(queryClient, districtId),
+    getPathwayMetrics(queryClient, districtId, "all"),
   ]);
 
   return (
@@ -77,6 +78,7 @@ export default async function PathwaysDashboardPage() {
         initialCampusSummaries={campusSummaries}
         initialSnapshots={snapshots}
         initialIndicators={indicators}
+        initialPathwayMetrics={pathwayMetrics}
       />
     </PathwaysAppShell>
   );

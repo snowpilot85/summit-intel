@@ -13,9 +13,11 @@ import {
   Minus,
   CheckCircle2,
   AlertCircle,
+  Award,
 } from "lucide-react";
-import { fetchStudentPage, type StudentFilters, type StudentClusterEntry } from "@/app/pathways/students/actions";
+import { fetchStudentPage, type StudentFilters, type StudentPathwayEntry } from "@/app/pathways/students/actions";
 import type { CampusRow, CCMRReadiness, IndicatorRow, IndicatorType, StudentRow } from "@/types/database";
+import type { CareerClusterOption } from "@/app/pathways/students/page";
 
 /* ============================================
    Summit Pathways Students Page
@@ -89,6 +91,39 @@ const StatusBadge = ({ status }: { status: CCMRReadiness }) => {
 };
 
 // ============================================
+// CREDENTIAL STATUS BADGE
+// ============================================
+
+type CredentialStatusValue = "earned" | "in_progress" | "not_started";
+
+const CREDENTIAL_STATUS_CONFIG: Record<
+  CredentialStatusValue,
+  { label: string; icon: React.ElementType; className: string }
+> = {
+  earned: { label: "Earned", icon: Award, className: "bg-teal-50 text-teal-800" },
+  in_progress: { label: "In Progress", icon: Clock, className: "bg-primary-100 text-primary-700" },
+  not_started: { label: "Not Started", icon: Minus, className: "bg-neutral-100 text-neutral-500" },
+};
+
+function deriveCredentialStatus(entry: StudentPathwayEntry | undefined): CredentialStatusValue {
+  if (!entry) return "not_started";
+  if (entry.credential_earned) return "earned";
+  if (entry.enrollment_status === "enrolled") return "in_progress";
+  return "not_started";
+}
+
+const CredentialStatusBadge = ({ entry }: { entry: StudentPathwayEntry | undefined }) => {
+  const status = deriveCredentialStatus(entry);
+  const { label, icon: Icon, className } = CREDENTIAL_STATUS_CONFIG[status];
+  return (
+    <span className={cn("inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[12px] font-medium", className)}>
+      <Icon className="w-3.5 h-3.5" />
+      {label}
+    </span>
+  );
+};
+
+// ============================================
 // INDICATOR PILL
 // ============================================
 
@@ -138,11 +173,12 @@ const SubgroupToggle = ({
 
 interface FilterBarProps {
   campuses: CampusRow[];
+  careerClusters: CareerClusterOption[];
   filters: StudentFilters;
   onChange: (f: StudentFilters) => void;
 }
 
-const FilterBar = ({ campuses, filters, onChange }: FilterBarProps) => {
+const FilterBar = ({ campuses, careerClusters, filters, onChange }: FilterBarProps) => {
   const [searchDraft, setSearchDraft] = React.useState(filters.search ?? "");
 
   // Debounce search
@@ -163,6 +199,7 @@ const FilterBar = ({ campuses, filters, onChange }: FilterBarProps) => {
 
   return (
     <div className="bg-neutral-0 border border-neutral-200 rounded-lg p-4 space-y-3">
+      {/* Row 1: Campus, Grade, CCMR Status, Search */}
       <div className="flex flex-wrap items-center gap-3">
         {/* Campus */}
         <div className="relative">
@@ -227,7 +264,46 @@ const FilterBar = ({ campuses, filters, onChange }: FilterBarProps) => {
         </div>
       </div>
 
-      {/* Subgroup toggles */}
+      {/* Row 2: CTE pathway filters */}
+      <div className="flex flex-wrap items-center gap-3">
+        {/* Career Cluster */}
+        <div className="relative">
+          <select
+            value={filters.clusterCode ?? ""}
+            onChange={(e) => set({ clusterCode: e.target.value || undefined })}
+            className="appearance-none bg-neutral-0 border border-neutral-200 rounded-md px-3 py-2 pr-8 text-[13px] font-medium text-neutral-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
+          >
+            <option value="">All clusters</option>
+            {careerClusters.map((cl) => (
+              <option key={cl.id} value={cl.code}>
+                {cl.name}
+              </option>
+            ))}
+          </select>
+          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 pointer-events-none" />
+        </div>
+
+        {/* Credential Status */}
+        <div className="relative">
+          <select
+            value={filters.credentialStatus ?? ""}
+            onChange={(e) =>
+              set({
+                credentialStatus: (e.target.value as StudentFilters["credentialStatus"]) || undefined,
+              })
+            }
+            className="appearance-none bg-neutral-0 border border-neutral-200 rounded-md px-3 py-2 pr-8 text-[13px] font-medium text-neutral-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
+          >
+            <option value="">All credential statuses</option>
+            <option value="earned">Earned</option>
+            <option value="in_progress">In Progress</option>
+            <option value="not_started">Not Started</option>
+          </select>
+          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 pointer-events-none" />
+        </div>
+      </div>
+
+      {/* Row 3: Subgroup toggles */}
       <div className="flex items-center gap-2">
         <span className="text-[12px] text-neutral-500 font-medium mr-1">Subgroups:</span>
         <SubgroupToggle label="EB" active={!!filters.isEb} onClick={() => toggleSubgroup("isEb")} />
@@ -247,7 +323,7 @@ interface StudentTableProps {
   students: StudentRow[];
   count: number;
   indicators: IndicatorRow[];
-  clusters: StudentClusterEntry[];
+  pathways: StudentPathwayEntry[];
   campuses: CampusRow[];
   page: number;
   graduationDate: string | null;
@@ -258,7 +334,7 @@ const StudentTable = ({
   students,
   count,
   indicators,
-  clusters,
+  pathways,
   campuses,
   page,
   graduationDate,
@@ -278,10 +354,10 @@ const StudentTable = ({
     }
     return map;
   }, [indicators]);
-  // Cluster name by student_id (first pathway only)
-  const clusterByStudent = React.useMemo(
-    () => new Map(clusters.map((c) => [c.student_id, c.cluster_name])),
-    [clusters]
+  // First pathway entry by student_id
+  const pathwayByStudent = React.useMemo(
+    () => new Map(pathways.map((p) => [p.student_id, p])),
+    [pathways]
   );
 
   const totalPages = Math.max(1, Math.ceil(count / PAGE_SIZE));
@@ -302,7 +378,8 @@ const StudentTable = ({
               <th className="text-left text-[12px] font-semibold text-neutral-700 px-4 py-3">CCMR status</th>
               <th className="text-left text-[12px] font-semibold text-neutral-700 px-4 py-3">Indicators met</th>
               <th className="text-left text-[12px] font-semibold text-neutral-700 px-4 py-3">Career cluster</th>
-              <th className="text-left text-[12px] font-semibold text-neutral-700 px-4 py-3">Nearest pathway</th>
+              <th className="text-left text-[12px] font-semibold text-neutral-700 px-4 py-3">Credential status</th>
+              <th className="text-left text-[12px] font-semibold text-neutral-700 px-4 py-3">Next credential</th>
               <th className="text-center text-[12px] font-semibold text-neutral-700 px-4 py-3">Days left</th>
               <th className="text-right text-[12px] font-semibold text-neutral-700 px-4 py-3">Action</th>
             </tr>
@@ -310,7 +387,7 @@ const StudentTable = ({
           <tbody>
             {students.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-4 py-10 text-center text-[13px] text-neutral-500">
+                <td colSpan={10} className="px-4 py-10 text-center text-[13px] text-neutral-500">
                   No students match the current filters.
                 </td>
               </tr>
@@ -320,8 +397,10 @@ const StudentTable = ({
                 const metIndicators = studentIndicators.filter((i) => i.status === "met");
                 const inProgressIndicators = studentIndicators.filter((i) => i.status === "in_progress");
 
-                // Nearest pathway: metadata field first, then first in_progress indicator label
-                const nearestPathway =
+                const pathwayEntry = pathwayByStudent.get(student.id);
+
+                // Next credential: metadata field first, then first in_progress indicator label
+                const nextCredential =
                   (student.metadata?.nearest_pathway as string | undefined) ??
                   (inProgressIndicators[0] ? indicatorLabel(inProgressIndicators[0].indicator_type) : null);
 
@@ -396,17 +475,21 @@ const StudentTable = ({
                     </td>
 
                     <td className="px-4 py-4 text-[13px] text-neutral-700">
-                      {clusterByStudent.get(student.id) ? (
+                      {pathwayEntry?.cluster_name ? (
                         <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-teal-50 text-teal-700">
-                          {clusterByStudent.get(student.id)}
+                          {pathwayEntry.cluster_name}
                         </span>
                       ) : (
                         <span className="text-neutral-400">—</span>
                       )}
                     </td>
 
+                    <td className="px-4 py-4">
+                      <CredentialStatusBadge entry={pathwayEntry} />
+                    </td>
+
                     <td className="px-4 py-4 text-[13px] text-neutral-700">
-                      {nearestPathway ?? <span className="text-neutral-400">—</span>}
+                      {nextCredential ?? <span className="text-neutral-400">—</span>}
                     </td>
 
                     <td className="px-4 py-4 text-center">
@@ -505,8 +588,9 @@ interface PathwaysStudentsProps {
   initialStudents: StudentRow[];
   initialCount: number;
   initialIndicators: IndicatorRow[];
-  initialClusters: StudentClusterEntry[];
+  initialPathways: StudentPathwayEntry[];
   campuses: CampusRow[];
+  careerClusters: CareerClusterOption[];
   graduationDate: string | null;
 }
 
@@ -514,15 +598,16 @@ export const PathwaysStudents = ({
   initialStudents,
   initialCount,
   initialIndicators,
-  initialClusters,
+  initialPathways,
   campuses,
+  careerClusters,
   graduationDate,
 }: PathwaysStudentsProps) => {
   const [filters, setFilters] = React.useState<StudentFilters>({ page: 1 });
   const [students, setStudents] = React.useState(initialStudents);
   const [count, setCount] = React.useState(initialCount);
   const [indicators, setIndicators] = React.useState(initialIndicators);
-  const [clusters, setClusters] = React.useState(initialClusters);
+  const [pathways, setPathways] = React.useState(initialPathways);
   const [isPending, startTransition] = React.useTransition();
 
   const applyFilters = React.useCallback((newFilters: StudentFilters) => {
@@ -533,7 +618,7 @@ export const PathwaysStudents = ({
         setStudents(result.students);
         setCount(result.count);
         setIndicators(result.indicators);
-        setClusters(result.clustersByStudent);
+        setPathways(result.pathwaysByStudent);
       } catch (err) {
         console.error("Failed to fetch students:", err);
       }
@@ -551,14 +636,19 @@ export const PathwaysStudents = ({
         </p>
       </div>
 
-      <FilterBar campuses={campuses} filters={filters} onChange={applyFilters} />
+      <FilterBar
+        campuses={campuses}
+        careerClusters={careerClusters}
+        filters={filters}
+        onChange={applyFilters}
+      />
 
       <div className={cn("transition-opacity duration-150", isPending && "opacity-50")}>
         <StudentTable
           students={students}
           count={count}
           indicators={indicators}
-          clusters={clusters}
+          pathways={pathways}
           campuses={campuses}
           page={currentPage}
           graduationDate={graduationDate}

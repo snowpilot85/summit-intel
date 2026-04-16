@@ -18,6 +18,7 @@ import {
   Briefcase,
   Award,
   Layers,
+  Building2,
 } from "lucide-react";
 import type {
   CCMRReadiness,
@@ -26,7 +27,9 @@ import type {
   InterventionRow,
   InterventionStatus,
   StudentRow,
+  WorkBasedLearningRow,
 } from "@/types/database";
+import type { CredentialProgressItem } from "@/app/pathways/students/[id]/page";
 
 /* ============================================
    Summit Pathways — Student Profile
@@ -744,6 +747,197 @@ const CareerPathwaySection = ({ pathway }: { pathway: StudentPathwayData }) => {
 };
 
 // ============================================
+// CREDENTIAL PROGRESS SECTION
+// ============================================
+
+const CREDENTIAL_STATUS_CONFIG = {
+  earned:      { label: "Earned",      icon: CheckCircle2, className: "bg-teal-50 text-teal-800" },
+  in_progress: { label: "In Progress", icon: Clock,        className: "bg-primary-100 text-primary-700" },
+  not_started: { label: "Not Started", icon: Minus,        className: "bg-neutral-100 text-neutral-500" },
+} as const;
+
+const CredentialProgressSection = ({
+  items,
+}: {
+  items: CredentialProgressItem[];
+}) => {
+  if (items.length === 0) return null;
+
+  return (
+    <div className="bg-neutral-0 border border-neutral-200 rounded-lg p-6">
+      <div className="flex items-center gap-2 mb-4">
+        <Award className="w-4 h-4 text-neutral-400" />
+        <h2 className="text-[18px] font-semibold text-neutral-900">Credential Progress</h2>
+      </div>
+
+      <div className="space-y-3">
+        {items.map((item) => {
+          const cfg = CREDENTIAL_STATUS_CONFIG[item.status];
+          const Icon = cfg.icon;
+          return (
+            <div
+              key={item.credentialId}
+              className="border border-neutral-200 rounded-lg p-4"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-[13px] font-semibold text-neutral-900">{item.name}</p>
+                    {item.isCapstone && (
+                      <span className="px-1.5 py-0.5 bg-teal-100 text-teal-700 text-[10px] font-semibold rounded uppercase tracking-wide">
+                        Capstone
+                      </span>
+                    )}
+                    {item.isCcmrEligible && (
+                      <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 text-[10px] font-semibold rounded uppercase tracking-wide">
+                        CCMR IBC
+                      </span>
+                    )}
+                  </div>
+                  {item.issuingBody && (
+                    <p className="text-[12px] text-neutral-500 mt-0.5">{item.issuingBody}</p>
+                  )}
+                </div>
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[12px] font-medium flex-shrink-0",
+                    cfg.className
+                  )}
+                >
+                  <Icon className="w-3.5 h-3.5" />
+                  {cfg.label}
+                </span>
+              </div>
+
+              {/* Detail row */}
+              <div className="flex flex-wrap items-center gap-4 mt-3">
+                {item.typicalGrade && (
+                  <div>
+                    <span className="text-[11px] text-neutral-400 uppercase tracking-wide">Typical grade </span>
+                    <span className="text-[12px] font-medium text-neutral-700">{item.typicalGrade}</span>
+                  </div>
+                )}
+                {item.passingScore && (
+                  <div>
+                    <span className="text-[11px] text-neutral-400 uppercase tracking-wide">Passing score </span>
+                    <span className="text-[12px] font-medium text-neutral-700">{item.passingScore}</span>
+                  </div>
+                )}
+                {item.examWindowNotes && (
+                  <div>
+                    <span className="text-[11px] text-neutral-400 uppercase tracking-wide">Exam window </span>
+                    <span className="text-[12px] text-neutral-600">{item.examWindowNotes}</span>
+                  </div>
+                )}
+                {item.notes && (
+                  <div>
+                    <span className="text-[12px] text-neutral-500 italic">{item.notes}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+// ============================================
+// WORK-BASED LEARNING SECTION
+// ============================================
+
+const WBL_ACTIVITY_LABELS: Record<string, string> = {
+  internship:           "Internship",
+  job_shadow:           "Job Shadow",
+  apprenticeship:       "Apprenticeship",
+  clinical:             "Clinical Rotation",
+  cooperative_education:"Co-op Education",
+  other:                "Work Experience",
+};
+
+const WBL_ACTIVITY_COLORS: Record<string, string> = {
+  internship:           "bg-teal-50 text-teal-700",
+  job_shadow:           "bg-primary-50 text-primary-700",
+  apprenticeship:       "bg-amber-50 text-amber-700",
+  clinical:             "bg-purple-50 text-purple-700",
+  cooperative_education:"bg-orange-50 text-orange-700",
+  other:                "bg-neutral-100 text-neutral-600",
+};
+
+const WorkBasedLearningSection = ({
+  records,
+}: {
+  records: WorkBasedLearningRow[];
+}) => {
+  return (
+    <div className="bg-neutral-0 border border-neutral-200 rounded-lg p-6">
+      <div className="flex items-center gap-2 mb-4">
+        <Building2 className="w-4 h-4 text-neutral-400" />
+        <h2 className="text-[18px] font-semibold text-neutral-900">Work-Based Learning</h2>
+      </div>
+
+      {records.length === 0 ? (
+        <p className="text-[13px] text-neutral-500">No work-based learning recorded yet.</p>
+      ) : (
+        <div className="space-y-3">
+          {records.map((rec) => {
+            const activityLabel = WBL_ACTIVITY_LABELS[rec.activity_type] ?? rec.activity_type;
+            const activityColor = WBL_ACTIVITY_COLORS[rec.activity_type] ?? "bg-neutral-100 text-neutral-600";
+            const dateRange = rec.end_date
+              ? `${formatDate(rec.start_date)} – ${formatDate(rec.end_date)}`
+              : `${formatDate(rec.start_date)} – present`;
+
+            return (
+              <div key={rec.id} className="border border-neutral-200 rounded-lg p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-semibold text-neutral-900">{rec.employer_name}</p>
+                    {rec.supervisor_name && (
+                      <p className="text-[12px] text-neutral-500 mt-0.5">
+                        Supervisor: {rec.supervisor_name}
+                      </p>
+                    )}
+                  </div>
+                  <span
+                    className={cn(
+                      "inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-medium flex-shrink-0",
+                      activityColor
+                    )}
+                  >
+                    {activityLabel}
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-4 mt-3">
+                  <div>
+                    <span className="text-[11px] text-neutral-400 uppercase tracking-wide">Dates </span>
+                    <span className="text-[12px] font-medium text-neutral-700">{dateRange}</span>
+                  </div>
+                  <div>
+                    <span className="text-[11px] text-neutral-400 uppercase tracking-wide">Hours </span>
+                    <span className="text-[12px] font-medium text-neutral-700">
+                      {rec.hours_completed.toLocaleString()}
+                    </span>
+                  </div>
+                  {rec.is_paid && (
+                    <span className="text-[12px] font-medium text-teal-700">Paid</span>
+                  )}
+                </div>
+
+                {rec.notes && (
+                  <p className="text-[12px] text-neutral-500 mt-2 leading-relaxed">{rec.notes}</p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ============================================
 // MAIN COMPONENT
 // ============================================
 
@@ -754,6 +948,8 @@ export interface StudentProfileProps {
   campusName: string;
   graduationDate: string | null;
   pathway?: StudentPathwayData;
+  credentialProgress: CredentialProgressItem[];
+  wblRecords: WorkBasedLearningRow[];
   from?: string;
 }
 
@@ -764,6 +960,8 @@ export const PathwaysStudentProfile = ({
   campusName,
   graduationDate,
   pathway,
+  credentialProgress,
+  wblRecords,
   from,
 }: StudentProfileProps) => {
   const backHref =
@@ -791,9 +989,11 @@ export const PathwaysStudentProfile = ({
 
       {/* Two-column layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left: Pathway + Indicator grid (wide) */}
+        {/* Left: Pathway + Credential Progress + WBL + Indicator grid (wide) */}
         <div className="lg:col-span-2 space-y-6">
           <CareerPathwaySection pathway={pathway ?? null} />
+          <CredentialProgressSection items={credentialProgress} />
+          <WorkBasedLearningSection records={wblRecords} />
           <CCMRIndicatorGrid indicators={indicators} />
         </div>
 

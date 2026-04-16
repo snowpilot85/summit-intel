@@ -14,11 +14,15 @@ import {
   ArrowDown,
   Minus,
   ChevronDown,
+  Layers,
+  Award,
+  BookOpen,
 } from "lucide-react";
 import { fetchGroupData } from "@/app/pathways/actions";
 import type {
   DashboardSummary,
   IndicatorCount,
+  PathwayMetrics,
   SubgroupFilter,
 } from "@/lib/db/dashboard";
 import type { CampusCCMRSummaryRow, SnapshotRow, IndicatorType } from "@/types/database";
@@ -38,6 +42,7 @@ interface PathwaysDashboardProps {
   initialCampusSummaries: CampusCCMRSummaryRow[];
   initialSnapshots: SnapshotRow[];
   initialIndicators: IndicatorCount[];
+  initialPathwayMetrics: PathwayMetrics;
 }
 
 // ============================================
@@ -621,6 +626,108 @@ const YearOverYearTable = ({
 };
 
 // ============================================
+// CTE PATHWAY SECTION
+// ============================================
+
+const CtePathwaySection = ({
+  metrics,
+  groupLabel,
+}: {
+  metrics: PathwayMetrics;
+  groupLabel: string;
+}) => {
+  const maxClusterCount = Math.max(...metrics.topClusters.map((c) => c.count), 1);
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <Layers className="w-4 h-4 text-neutral-400" />
+        <h2 className="text-[15px] font-semibold text-neutral-700 uppercase tracking-wide">
+          Career &amp; Technical Education
+        </h2>
+        {groupLabel !== "All students" && (
+          <span className="text-[12px] text-neutral-500">({groupLabel})</span>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Card 1: Students with Pathways */}
+        <div className="bg-neutral-0 border border-neutral-200 rounded-lg p-5">
+          <div className="flex items-center gap-2 mb-2">
+            <BookOpen className="w-4 h-4 text-teal-500" />
+            <p className="text-[12px] text-neutral-500 font-medium">Students with Pathways</p>
+          </div>
+          <p className="text-[32px] font-bold text-teal-600 leading-none">
+            {metrics.studentsWithPathways.toLocaleString()}
+          </p>
+          <p className="text-[12px] text-neutral-500 mt-2">
+            <span className="font-semibold text-teal-700">{metrics.pathwayPercent}%</span>
+            {" "}of 9–12 students enrolled in a CTE program of study
+          </p>
+        </div>
+
+        {/* Card 2: Top Career Clusters */}
+        <div className="bg-neutral-0 border border-neutral-200 rounded-lg p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <Layers className="w-4 h-4 text-primary-500" />
+            <p className="text-[12px] text-neutral-500 font-medium">Top Career Clusters</p>
+          </div>
+          {metrics.topClusters.length === 0 ? (
+            <p className="text-[13px] text-neutral-400">No pathway data available.</p>
+          ) : (
+            <div className="space-y-2">
+              {metrics.topClusters.map((cluster) => (
+                <div key={cluster.clusterCode} className="flex items-center gap-2">
+                  <span
+                    className="text-[11px] text-neutral-500 w-[32px] text-right flex-shrink-0 font-mono"
+                    title={cluster.clusterCode}
+                  >
+                    {cluster.clusterCode}
+                  </span>
+                  <div className="flex-1 h-5 bg-neutral-100 rounded overflow-hidden">
+                    <div
+                      className="h-full bg-primary-400 rounded transition-all duration-500"
+                      style={{ width: `${(cluster.count / maxClusterCount) * 100}%` }}
+                    />
+                  </div>
+                  <span className="text-[12px] font-medium text-neutral-700 w-[36px] text-right flex-shrink-0">
+                    {cluster.count}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+          <p className="text-[11px] text-neutral-400 mt-3">By student pathway enrollment</p>
+        </div>
+
+        {/* Card 3: Credentials Earned */}
+        <div className="bg-neutral-0 border border-neutral-200 rounded-lg p-5">
+          <div className="flex items-center gap-2 mb-2">
+            <Award className="w-4 h-4 text-warning-dark" />
+            <p className="text-[12px] text-neutral-500 font-medium">Credentials Earned</p>
+          </div>
+          <p className="text-[32px] font-bold text-warning-dark leading-none">
+            {metrics.credentialsEarned.toLocaleString()}
+          </p>
+          <p className="text-[12px] text-neutral-500 mt-2">
+            <span className="font-semibold text-warning-dark">{metrics.credentialPercent}%</span>
+            {" "}of pathway students have earned an industry-based credential
+          </p>
+          {metrics.credentialsEarned > 0 && (
+            <div className="mt-3 h-1.5 bg-neutral-100 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-warning rounded-full transition-all duration-500"
+                style={{ width: `${metrics.credentialPercent}%` }}
+              />
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ============================================
 // CUSTOM FILTER PLACEHOLDER
 // ============================================
 
@@ -684,6 +791,7 @@ export const PathwaysDashboard = ({
   initialCampusSummaries,
   initialSnapshots,
   initialIndicators,
+  initialPathwayMetrics,
 }: PathwaysDashboardProps) => {
   const [studentGroup, setStudentGroup] = React.useState<StudentGroup>("all");
   const [isLoading, setIsLoading] = React.useState(false);
@@ -694,6 +802,8 @@ export const PathwaysDashboard = ({
     React.useState<SnapshotRow[]>(initialSnapshots);
   const [indicators] =
     React.useState<IndicatorCount[]>(initialIndicators);
+  const [pathwayMetrics, setPathwayMetrics] =
+    React.useState<PathwayMetrics>(initialPathwayMetrics);
   // Keep overall CCMR % for subgroup gap calculation
   const allStudentsCcmrPercent = React.useRef(initialSummary.ccmrPercent);
 
@@ -713,14 +823,19 @@ export const PathwaysDashboard = ({
       const subgroup = group as SubgroupFilter;
       setIsLoading(true);
       try {
-        const { summary: newSummary, campusSummaries: newCampuses, snapshots: newSnapshots } =
-          await fetchGroupData(districtId, subgroup);
+        const {
+          summary: newSummary,
+          campusSummaries: newCampuses,
+          snapshots: newSnapshots,
+          pathwayMetrics: newPathwayMetrics,
+        } = await fetchGroupData(districtId, subgroup);
         if (group === "all") {
           allStudentsCcmrPercent.current = newSummary.ccmrPercent;
         }
         setSummary(newSummary);
         setCampusSummaries(newCampuses);
         setSnapshots(newSnapshots);
+        setPathwayMetrics(newPathwayMetrics);
       } catch (err) {
         console.error("Failed to load group data:", err);
       } finally {
@@ -869,6 +984,9 @@ export const PathwaysDashboard = ({
           badge={summary.atRiskSeniors > 0 ? "ACTION NEEDED" : undefined}
         />
       </div>
+
+      {/* CTE Pathway Metrics */}
+      <CtePathwaySection metrics={pathwayMetrics} groupLabel={groupLabel} />
 
       {/* Comparison Banner (only for subgroups with a gap) */}
       {comparisonBanner && (

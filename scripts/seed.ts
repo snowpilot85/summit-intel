@@ -1178,6 +1178,49 @@ async function seed() {
   }
   console.log(`\n  ✅ ${studentPathways.length} student pathways created`)
 
+  // ---- Work-Based Learning ----
+  console.log('🏢 Generating work-based learning records...')
+  // Add WBL records for ~every 12th student (roughly 8% of the cohort)
+  const wblStudents = students.filter((_, i) => i % 12 === 0).slice(0, 40)
+
+  type WblActivityType = 'internship' | 'job_shadow' | 'apprenticeship' | 'clinical' | 'cooperative_education'
+  const EMPLOYERS: { name: string; type: WblActivityType }[] = [
+    { name: 'DHR Health', type: 'clinical' },
+    { name: 'Edinburg ISD Technology Services', type: 'internship' },
+    { name: 'H-E-B', type: 'cooperative_education' },
+    { name: 'Valley Baptist Medical Center', type: 'clinical' },
+    { name: 'SpaceX Starbase', type: 'internship' },
+    { name: 'Rio Grande Valley Electric Cooperative', type: 'apprenticeship' },
+    { name: 'City of Edinburg Public Works', type: 'job_shadow' },
+    { name: 'University of Texas Rio Grande Valley', type: 'internship' },
+    { name: 'McAllen Fire Department', type: 'job_shadow' },
+    { name: 'Hidalgo County Constable Office', type: 'job_shadow' },
+  ]
+
+  const wblRecords = wblStudents.map((student, idx) => {
+    const employer = EMPLOYERS[idx % EMPLOYERS.length]
+    const isPaid = employer.type === 'internship' || employer.type === 'cooperative_education' || employer.type === 'apprenticeship'
+    return {
+      student_id: student.id,
+      district_id: DISTRICT_ID,
+      activity_type: employer.type,
+      employer_name: employer.name,
+      supervisor_name: null as string | null,
+      start_date: '2025-09-08',
+      end_date: employer.type === 'job_shadow' ? '2025-09-08' : null as string | null,
+      hours_completed: employer.type === 'job_shadow' ? 8 : 80 + (idx % 7) * 20,
+      is_paid: isPaid,
+      notes: null as string | null,
+      metadata: {} as Record<string, unknown>,
+    }
+  })
+
+  if (wblRecords.length > 0) {
+    const { error: wblErr } = await supabase.from('work_based_learning').insert(wblRecords)
+    if (wblErr) throw new Error(`WBL insert failed: ${wblErr.message}`)
+  }
+  console.log(`  ✅ ${wblRecords.length} work-based learning records created`)
+
   // ---- Historical Snapshots ----
   console.log('📊 Creating historical snapshots...')
   const snapshots = generateSnapshots()
@@ -1204,6 +1247,7 @@ async function seed() {
   console.log(`  Indicators:   ${indicators.length}`)
   console.log(`  Interventions:${interventions.length}`)
   console.log(`  Pathways:     ${studentPathways.length}`)
+  console.log(`  WBL records:  ${wblRecords.length}`)
   console.log(`  Snapshots:    ${snapshots.length} years`)
   console.log('============================================\n')
 }

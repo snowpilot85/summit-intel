@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { requireSuperAdmin } from "@/lib/db/users";
 import { createAdminClient } from "@/utils/supabase/admin";
-import { getDashboardSummary, type SubgroupFilter } from "@/lib/db/dashboard";
+import { getDashboardSummary, getPathwayMetrics, type SubgroupFilter, type PathwayMetrics } from "@/lib/db/dashboard";
 import { getCampusSummaries } from "@/lib/db/campuses";
 import { getAnnualSnapshots } from "@/lib/db/snapshots";
 import type { CampusCCMRSummaryRow, SnapshotRow } from "@/types/database";
@@ -41,6 +41,7 @@ export interface GroupDataResult {
   summary: DashboardSummary;
   campusSummaries: CampusCCMRSummaryRow[];
   snapshots: SnapshotRow[];
+  pathwayMetrics: PathwayMetrics;
 }
 
 export async function fetchGroupData(
@@ -49,11 +50,12 @@ export async function fetchGroupData(
 ): Promise<GroupDataResult> {
   const supabase = createAdminClient();
 
-  const [summary, campusSummaries, snapshots] = await Promise.all([
+  const [summary, campusSummaries, snapshots, pathwayMetrics] = await Promise.all([
     getDashboardSummary(supabase, districtId, subgroup),
     getCampusSummaries(supabase, districtId),
     getAnnualSnapshots(supabase, districtId),
+    getPathwayMetrics(supabase, districtId, subgroup),
   ]);
 
-  return { summary, campusSummaries, snapshots };
+  return { summary, campusSummaries, snapshots, pathwayMetrics };
 }

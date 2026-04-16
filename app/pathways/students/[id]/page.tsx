@@ -8,10 +8,25 @@ import { getStudentById } from "@/lib/db/students";
 import { getStudentIndicators } from "@/lib/db/indicators";
 import { getInterventions } from "@/lib/db/interventions";
 import { getUserContext } from "@/lib/db/users";
+import type { WorkBasedLearningRow } from "@/types/database";
 
 function formatRole(role: string): string {
   return role.split("_").map((w) => w[0].toUpperCase() + w.slice(1)).join(" ");
 }
+
+export type CredentialProgressItem = {
+  credentialId: string;
+  name: string;
+  issuingBody: string | null;
+  isCcmrEligible: boolean;
+  isCapstone: boolean;
+  sequenceOrder: number;
+  typicalGrade: number | null;
+  passingScore: string | null;
+  examWindowNotes: string | null;
+  status: "earned" | "in_progress" | "not_started";
+  notes: string | null;
+};
 
 export default async function PathwaysStudentProfilePage({
   params,
@@ -39,11 +54,12 @@ export default async function PathwaysStudentProfilePage({
 
   if (!student) notFound();
 
+  // Fetch campus and full pathway row (including program_id and credential_id for progress tracking)
   const [{ data: campus }, { data: pathwayRow }] = await Promise.all([
     queryClient.from("campuses").select("name").eq("id", student.campus_id).single(),
     queryClient
       .from("student_pathways")
-      .select("enrollment_status, credential_earned, state_career_clusters(name, code), programs_of_study(name, code)")
+      .select("enrollment_status, credential_earned, credential_id, program_id, state_career_clusters(name, code), programs_of_study(name, code)")
       .eq("student_id", id)
       .maybeSingle(),
   ]);
@@ -61,6 +77,74 @@ export default async function PathwaysStudentProfilePage({
     enrollmentStatus: pathwayRow.enrollment_status as string,
     credentialEarned: pathwayRow.credential_earned,
   } : null;
+
+  // Fetch credential progress (pathway_credentials → state_credential_catalog)
+  // and work-based learning in parallel
+  const programId = (pathwayRow as { program_id?: string } | null)?.program_id ?? null;
+  const studentCredentialId = (pathwayRow as { credential_id?: string | null } | null)?.credential_id ?? null;
+  const studentCredentialEarned = pathwayRow?.credential_earned ?? false;
+  const enrollmentStatus = pathwayRow?.enrollment_status ?? "enrolled";
+
+  type CredentialCatalogShape = {
+    id: string;
+    name: string;
+    issuing_body: string | null;
+    passing_score: string | null;
+    exam_window_notes: string | null;
+    is_ccmr_eligible: boolean;
+  };
+  type PathwayCredentialShape = {
+    id: string;
+    credential_id: string;
+    is_capstone: boolean;
+    sequence_order: number;
+    typical_grade: number | null;
+    notes: string | null;
+    state_credential_catalog: CredentialCatalogShape | null;
+  };
+
+  const [credentialResult, wblResult] = await Promise.all([
+    programId
+      ? (queryClient as ReturnType<typeof createAdminClient>)
+          .from("pathway_credentials")
+          .select("id, credential_id, is_capstone, sequence_order, typical_grade, notes, state_credential_catalog(id, name, issuing_body, passing_score, exam_window_notes, is_ccmr_eligible)")
+          .eq("program_id", programId)
+          .order("sequence_order", { ascending: true })
+      : Promise.resolve({ data: [] as PathwayCredentialShape[] }),
+    queryClient
+      .from("work_based_learning")
+      .select("*")
+      .eq("student_id", id)
+      .order("start_date", { ascending: false }),
+  ]);
+
+  // Build credential progress items
+  const credentialProgress: CredentialProgressItem[] = (
+    (credentialResult.data ?? []) as unknown as PathwayCredentialShape[]
+  ).map((pc) => {
+    const cat = pc.state_credential_catalog;
+    let status: CredentialProgressItem["status"] = "not_started";
+    if (pc.credential_id === studentCredentialId && studentCredentialEarned) {
+      status = "earned";
+    } else if (pc.credential_id === studentCredentialId && enrollmentStatus === "enrolled") {
+      status = "in_progress";
+    }
+    return {
+      credentialId: pc.credential_id,
+      name: cat?.name ?? "Unknown credential",
+      issuingBody: cat?.issuing_body ?? null,
+      isCcmrEligible: cat?.is_ccmr_eligible ?? false,
+      isCapstone: pc.is_capstone,
+      sequenceOrder: pc.sequence_order,
+      typicalGrade: pc.typical_grade,
+      passingScore: cat?.passing_score ?? null,
+      examWindowNotes: cat?.exam_window_notes ?? null,
+      status,
+      notes: pc.notes,
+    };
+  });
+
+  const wblRecords = (wblResult.data ?? []) as WorkBasedLearningRow[];
   const studentName = `${student.first_name} ${student.last_name}`;
 
   return (
@@ -95,6 +179,8 @@ export default async function PathwaysStudentProfilePage({
         campusName={campusName}
         graduationDate={graduationDate}
         pathway={pathway}
+        credentialProgress={credentialProgress}
+        wblRecords={wblRecords}
         from={from}
       />
     </PathwaysAppShell>
