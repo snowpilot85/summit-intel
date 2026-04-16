@@ -22,6 +22,7 @@ export interface StudentFilters {
   // CTE pathway filters
   clusterCode?: string;
   credentialStatus?: "earned" | "in_progress" | "not_started";
+  pathwayStatus?: "with_pathway" | "without_pathway";
 }
 
 export type StudentPathwayEntry = {
@@ -64,14 +65,14 @@ async function fetchStudentsWithFilters(
   const {
     page = 1, campusId, gradeLevel, readiness,
     isEb, isEconDisadvantaged, isSpecialEd, is504, search,
-    credentialStatus,
+    credentialStatus, pathwayStatus,
   } = filters;
 
   const from = (page - 1) * PAGE_SIZE;
   const to   = from + PAGE_SIZE - 1;
 
-  const noPathway = credentialStatus === "not_started";
-  const needsJoin = clusterUuid !== null || credentialStatus !== undefined;
+  const noPathway = credentialStatus === "not_started" || pathwayStatus === "without_pathway";
+  const needsJoin = clusterUuid !== null || credentialStatus !== undefined || pathwayStatus !== undefined;
 
   // ── No pathway filter ────────────────────────────────────────────────────
   if (!needsJoin) {

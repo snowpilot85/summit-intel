@@ -266,6 +266,22 @@ const FilterBar = ({ campuses, careerClusters, filters, onChange }: FilterBarPro
 
       {/* Row 2: CTE pathway filters */}
       <div className="flex flex-wrap items-center gap-3">
+        {/* Pathway presence */}
+        <div className="relative">
+          <select
+            value={filters.pathwayStatus ?? ""}
+            onChange={(e) =>
+              set({ pathwayStatus: (e.target.value as StudentFilters["pathwayStatus"]) || undefined })
+            }
+            className="appearance-none bg-neutral-0 border border-neutral-200 rounded-md px-3 py-2 pr-8 text-[13px] font-medium text-neutral-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
+          >
+            <option value="">All students</option>
+            <option value="with_pathway">With pathway</option>
+            <option value="without_pathway">Without pathway</option>
+          </select>
+          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 pointer-events-none" />
+        </div>
+
         {/* Career Cluster */}
         <div className="relative">
           <select

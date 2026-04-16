@@ -23,6 +23,7 @@ import {
   Gauge,
   Shield,
   ArrowLeftRight,
+  BarChart3,
 } from "lucide-react";
 import { clearDistrict } from "@/app/pathways/actions";
 
@@ -255,6 +256,7 @@ const pathwaysNavItems = [
   { id: "students", label: "Students", icon: Users, href: "/pathways/students" },
   { id: "interventions", label: "Interventions", icon: Target, href: "/pathways/interventions" },
   { id: "campus-reports", label: "Campus Reports", icon: Building2, href: "/pathways/campus-reports" },
+  { id: "admin", label: "District Admin", icon: BarChart3, href: "/pathways/admin" },
   { id: "simulator", label: "A-F Simulator", icon: Gauge, href: "/pathways/simulator" },
   { id: "data-upload", label: "Data Upload", icon: Upload, href: "/pathways/data-upload" },
   { id: "settings", label: "Settings", icon: Settings, href: "/pathways/settings" },
