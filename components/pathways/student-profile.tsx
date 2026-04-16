@@ -17,6 +17,7 @@ import {
   BookOpen,
   Briefcase,
   Award,
+  Layers,
 } from "lucide-react";
 import type {
   CCMRReadiness,
@@ -660,6 +661,89 @@ const StudentMetadata = ({
 };
 
 // ============================================
+// CAREER PATHWAY SECTION
+// ============================================
+
+export type StudentPathwayData = {
+  clusterName: string;
+  clusterCode: string;
+  programName: string;
+  enrollmentStatus: string;
+  credentialEarned: boolean;
+} | null;
+
+const ENROLLMENT_STATUS_CONFIG: Record<string, { label: string; className: string }> = {
+  enrolled:    { label: "Enrolled",    className: "bg-primary-100 text-primary-700" },
+  completed:   { label: "Completed",   className: "bg-teal-100 text-teal-700" },
+  withdrawn:   { label: "Withdrawn",   className: "bg-neutral-100 text-neutral-500" },
+  transferred: { label: "Transferred", className: "bg-neutral-100 text-neutral-500" },
+};
+
+const CareerPathwaySection = ({ pathway }: { pathway: StudentPathwayData }) => {
+  if (!pathway) return null;
+
+  const statusConfig =
+    ENROLLMENT_STATUS_CONFIG[pathway.enrollmentStatus] ?? ENROLLMENT_STATUS_CONFIG.enrolled;
+
+  return (
+    <div className="bg-neutral-0 border border-neutral-200 rounded-lg p-6">
+      <div className="flex items-center gap-2 mb-4">
+        <Layers className="w-4 h-4 text-neutral-400" />
+        <h2 className="text-[18px] font-semibold text-neutral-900">Career Pathway</h2>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <p className="text-[11px] text-neutral-500 uppercase tracking-wide font-medium mb-1">
+            Career Cluster
+          </p>
+          <p className="text-[14px] font-semibold text-neutral-900">{pathway.clusterName}</p>
+          <p className="text-[12px] text-neutral-500 mt-0.5">{pathway.clusterCode}</p>
+        </div>
+
+        <div>
+          <p className="text-[11px] text-neutral-500 uppercase tracking-wide font-medium mb-1">
+            Program of Study
+          </p>
+          <p className="text-[14px] font-medium text-neutral-900">{pathway.programName}</p>
+        </div>
+
+        <div>
+          <p className="text-[11px] text-neutral-500 uppercase tracking-wide font-medium mb-1">
+            Enrollment Status
+          </p>
+          <span
+            className={cn(
+              "inline-flex items-center px-2.5 py-0.5 rounded-full text-[12px] font-medium",
+              statusConfig.className
+            )}
+          >
+            {statusConfig.label}
+          </span>
+        </div>
+
+        <div>
+          <p className="text-[11px] text-neutral-500 uppercase tracking-wide font-medium mb-1">
+            Credential Earned
+          </p>
+          {pathway.credentialEarned ? (
+            <div className="flex items-center gap-1.5">
+              <CheckCircle2 className="w-4 h-4 text-teal-600" />
+              <span className="text-[13px] font-medium text-teal-700">Yes — IBC met</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5">
+              <Clock className="w-4 h-4 text-neutral-400" />
+              <span className="text-[13px] text-neutral-500">Not yet earned</span>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ============================================
 // MAIN COMPONENT
 // ============================================
 
@@ -669,6 +753,7 @@ export interface StudentProfileProps {
   interventions: InterventionRow[];
   campusName: string;
   graduationDate: string | null;
+  pathway?: StudentPathwayData;
   from?: string;
 }
 
@@ -678,6 +763,7 @@ export const PathwaysStudentProfile = ({
   interventions,
   campusName,
   graduationDate,
+  pathway,
   from,
 }: StudentProfileProps) => {
   const backHref =
@@ -705,8 +791,9 @@ export const PathwaysStudentProfile = ({
 
       {/* Two-column layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left: Indicator grid (wide) */}
+        {/* Left: Pathway + Indicator grid (wide) */}
         <div className="lg:col-span-2 space-y-6">
+          <CareerPathwaySection pathway={pathway ?? null} />
           <CCMRIndicatorGrid indicators={indicators} />
         </div>
 

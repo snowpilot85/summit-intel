@@ -39,13 +39,28 @@ export default async function PathwaysStudentProfilePage({
 
   if (!student) notFound();
 
-  const { data: campus } = await queryClient
-    .from("campuses")
-    .select("name")
-    .eq("id", student.campus_id)
-    .single();
+  const [{ data: campus }, { data: pathwayRow }] = await Promise.all([
+    queryClient.from("campuses").select("name").eq("id", student.campus_id).single(),
+    queryClient
+      .from("student_pathways")
+      .select("enrollment_status, credential_earned, state_career_clusters(name, code), programs_of_study(name, code)")
+      .eq("student_id", id)
+      .maybeSingle(),
+  ]);
 
   const campusName = campus?.name ?? "Unknown campus";
+
+  type ClusterShape = { name: string; code: string };
+  type ProgramShape = { name: string; code: string };
+  const cluster = pathwayRow?.state_career_clusters as ClusterShape | null | undefined;
+  const program = pathwayRow?.programs_of_study as ProgramShape | null | undefined;
+  const pathway = pathwayRow && cluster && program ? {
+    clusterName: cluster.name,
+    clusterCode: cluster.code,
+    programName: program.name,
+    enrollmentStatus: pathwayRow.enrollment_status as string,
+    credentialEarned: pathwayRow.credential_earned,
+  } : null;
   const studentName = `${student.first_name} ${student.last_name}`;
 
   return (
@@ -79,6 +94,7 @@ export default async function PathwaysStudentProfilePage({
         interventions={interventions}
         campusName={campusName}
         graduationDate={graduationDate}
+        pathway={pathway}
         from={from}
       />
     </PathwaysAppShell>

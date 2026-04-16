@@ -30,7 +30,25 @@ export default async function PathwaysStudentsPage() {
   ]);
 
   const studentIds = students.map((s) => s.id);
-  const indicators = await getIndicatorsForStudents(queryClient, studentIds);
+  const [indicators, pathwayRows] = await Promise.all([
+    getIndicatorsForStudents(queryClient, studentIds),
+    studentIds.length > 0
+      ? queryClient
+          .from("student_pathways")
+          .select("student_id, state_career_clusters(name, code)")
+          .in("student_id", studentIds)
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  type ClusterShape = { name: string; code: string };
+  const initialClusters = (pathwayRows.data ?? []).map((r) => {
+    const c = r.state_career_clusters as unknown as ClusterShape | null;
+    return {
+      student_id: r.student_id,
+      cluster_name: c?.name ?? "",
+      cluster_code: c?.code ?? "",
+    };
+  });
 
   return (
     <PathwaysAppShell
@@ -53,6 +71,7 @@ export default async function PathwaysStudentsPage() {
         initialStudents={students}
         initialCount={count}
         initialIndicators={indicators}
+        initialClusters={initialClusters}
         campuses={campuses}
         graduationDate={graduationDate}
       />

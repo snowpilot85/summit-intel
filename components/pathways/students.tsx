@@ -14,7 +14,7 @@ import {
   CheckCircle2,
   AlertCircle,
 } from "lucide-react";
-import { fetchStudentPage, type StudentFilters } from "@/app/pathways/students/actions";
+import { fetchStudentPage, type StudentFilters, type StudentClusterEntry } from "@/app/pathways/students/actions";
 import type { CampusRow, CCMRReadiness, IndicatorRow, IndicatorType, StudentRow } from "@/types/database";
 
 /* ============================================
@@ -247,6 +247,7 @@ interface StudentTableProps {
   students: StudentRow[];
   count: number;
   indicators: IndicatorRow[];
+  clusters: StudentClusterEntry[];
   campuses: CampusRow[];
   page: number;
   graduationDate: string | null;
@@ -257,6 +258,7 @@ const StudentTable = ({
   students,
   count,
   indicators,
+  clusters,
   campuses,
   page,
   graduationDate,
@@ -276,6 +278,11 @@ const StudentTable = ({
     }
     return map;
   }, [indicators]);
+  // Cluster name by student_id (first pathway only)
+  const clusterByStudent = React.useMemo(
+    () => new Map(clusters.map((c) => [c.student_id, c.cluster_name])),
+    [clusters]
+  );
 
   const totalPages = Math.max(1, Math.ceil(count / PAGE_SIZE));
   const showing = students.length;
@@ -294,6 +301,7 @@ const StudentTable = ({
               <th className="text-center text-[12px] font-semibold text-neutral-700 px-4 py-3">Grade</th>
               <th className="text-left text-[12px] font-semibold text-neutral-700 px-4 py-3">CCMR status</th>
               <th className="text-left text-[12px] font-semibold text-neutral-700 px-4 py-3">Indicators met</th>
+              <th className="text-left text-[12px] font-semibold text-neutral-700 px-4 py-3">Career cluster</th>
               <th className="text-left text-[12px] font-semibold text-neutral-700 px-4 py-3">Nearest pathway</th>
               <th className="text-center text-[12px] font-semibold text-neutral-700 px-4 py-3">Days left</th>
               <th className="text-right text-[12px] font-semibold text-neutral-700 px-4 py-3">Action</th>
@@ -302,7 +310,7 @@ const StudentTable = ({
           <tbody>
             {students.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-10 text-center text-[13px] text-neutral-500">
+                <td colSpan={9} className="px-4 py-10 text-center text-[13px] text-neutral-500">
                   No students match the current filters.
                 </td>
               </tr>
@@ -384,6 +392,16 @@ const StudentTable = ({
                         </div>
                       ) : (
                         <span className="text-[12px] text-neutral-400">None</span>
+                      )}
+                    </td>
+
+                    <td className="px-4 py-4 text-[13px] text-neutral-700">
+                      {clusterByStudent.get(student.id) ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-teal-50 text-teal-700">
+                          {clusterByStudent.get(student.id)}
+                        </span>
+                      ) : (
+                        <span className="text-neutral-400">—</span>
                       )}
                     </td>
 
@@ -487,6 +505,7 @@ interface PathwaysStudentsProps {
   initialStudents: StudentRow[];
   initialCount: number;
   initialIndicators: IndicatorRow[];
+  initialClusters: StudentClusterEntry[];
   campuses: CampusRow[];
   graduationDate: string | null;
 }
@@ -495,6 +514,7 @@ export const PathwaysStudents = ({
   initialStudents,
   initialCount,
   initialIndicators,
+  initialClusters,
   campuses,
   graduationDate,
 }: PathwaysStudentsProps) => {
@@ -502,6 +522,7 @@ export const PathwaysStudents = ({
   const [students, setStudents] = React.useState(initialStudents);
   const [count, setCount] = React.useState(initialCount);
   const [indicators, setIndicators] = React.useState(initialIndicators);
+  const [clusters, setClusters] = React.useState(initialClusters);
   const [isPending, startTransition] = React.useTransition();
 
   const applyFilters = React.useCallback((newFilters: StudentFilters) => {
@@ -512,6 +533,7 @@ export const PathwaysStudents = ({
         setStudents(result.students);
         setCount(result.count);
         setIndicators(result.indicators);
+        setClusters(result.clustersByStudent);
       } catch (err) {
         console.error("Failed to fetch students:", err);
       }
@@ -536,6 +558,7 @@ export const PathwaysStudents = ({
           students={students}
           count={count}
           indicators={indicators}
+          clusters={clusters}
           campuses={campuses}
           page={currentPage}
           graduationDate={graduationDate}
