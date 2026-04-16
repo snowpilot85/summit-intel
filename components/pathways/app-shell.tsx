@@ -24,6 +24,7 @@ import {
   Shield,
   ArrowLeftRight,
   BarChart3,
+  Compass,
 } from "lucide-react";
 import { clearDistrict } from "@/app/pathways/actions";
 
@@ -255,6 +256,7 @@ const pathwaysNavItems = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, href: "/pathways" },
   { id: "students", label: "Students", icon: Users, href: "/pathways/students" },
   { id: "interventions", label: "Interventions", icon: Target, href: "/pathways/interventions" },
+  { id: "clusters", label: "Cluster Explorer", icon: Compass, href: "/pathways/clusters" },
   { id: "campus-reports", label: "Campus Reports", icon: Building2, href: "/pathways/campus-reports" },
   { id: "admin", label: "District Admin", icon: BarChart3, href: "/pathways/admin" },
   { id: "simulator", label: "A-F Simulator", icon: Gauge, href: "/pathways/simulator" },
