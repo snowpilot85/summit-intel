@@ -9,7 +9,7 @@ import { getUserContext } from "@/lib/db/users";
 import type { DataUploadRow } from "@/types/database";
 
 export const metadata: Metadata = {
-  title: "Data Upload | Summit Readiness",
+  title: "Data Upload | Summit Pathways",
   description: "Upload CCMR tracker files and student data",
 };
 
@@ -45,7 +45,7 @@ export default async function Page() {
         notificationCount: 0,
       }}
       breadcrumbs={[
-        { label: "Summit Readiness", href: "/pathways" },
+        { label: "Summit Pathways", href: "/pathways" },
         { label: "Data Upload" },
       ]}
       activeNavItem="data-upload"

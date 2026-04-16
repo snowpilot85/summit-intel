@@ -397,7 +397,7 @@ const DataSourcesTable = ({ uploads }: { uploads: DataUploadRow[] }) => {
       <div className="px-6 py-4 border-b border-neutral-200">
         <h2 className="text-[17px] font-semibold text-neutral-900">Data sources</h2>
         <p className="text-[13px] text-neutral-500 mt-0.5">
-          Status of each data feed powering Summit Readiness
+          Status of each data feed powering Summit Pathways
         </p>
       </div>
       <div className="overflow-x-auto">
@@ -623,7 +623,7 @@ const ColumnMapper = ({
                   Your column
                 </th>
                 <th className="px-4 py-2 text-left text-[12px] font-semibold text-neutral-700 w-[220px]">
-                  Summit Readiness field
+                  Summit Pathways field
                 </th>
                 <th className="px-4 py-2 text-left text-[12px] font-semibold text-neutral-700">
                   Sample values

@@ -27,7 +27,7 @@ import {
 import { clearDistrict } from "@/app/pathways/actions";
 
 /* ============================================
-   Summit Readiness App Shell Components
+   Summit Pathways App Shell Components
    College, Career & Military Readiness Platform
    ============================================ */
 
@@ -77,7 +77,7 @@ export const PathwaysHeader = ({
               {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
             
-            {/* Summit Readiness Logo with subtitle */}
+            {/* Summit Pathways Logo with subtitle */}
             <div className="flex flex-col">
               <div className="flex items-center gap-2">
                 <Image
@@ -88,7 +88,7 @@ export const PathwaysHeader = ({
                   className="h-7 w-auto flex-shrink-0"
                   priority
                 />
-                <span className="text-[20px] font-semibold text-teal-300">Readiness</span>
+                <span className="text-[20px] font-semibold text-teal-300">Pathways</span>
               </div>
               <p className="text-[11px] opacity-70 mt-1 tracking-wide">College, Career & Military Readiness</p>
             </div>
@@ -329,7 +329,7 @@ export const PathwaysAppShell = ({
   children,
   headerProps,
   breadcrumbs = [
-    { label: "Summit Readiness", href: "/pathways" },
+    { label: "Summit Pathways", href: "/pathways" },
     { label: "Dashboard" },
   ],
   activeNavItem = "dashboard",

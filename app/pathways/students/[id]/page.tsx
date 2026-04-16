@@ -15,10 +15,12 @@ function formatRole(role: string): string {
 
 export default async function PathwaysStudentProfilePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ from?: string }>;
 }) {
-  const { id } = await params;
+  const [{ id }, { from }] = await Promise.all([params, searchParams]);
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
   const userCtx = await getUserContext(supabase);
@@ -55,12 +57,20 @@ export default async function PathwaysStudentProfilePage({
         schoolYear: schoolYearLabel,
         notificationCount: 0,
       }}
-      breadcrumbs={[
-        { label: "Summit Readiness", href: "/pathways" },
-        { label: "Students", href: "/pathways/students" },
-        { label: studentName },
-      ]}
-      activeNavItem="students"
+      breadcrumbs={
+        from === "interventions"
+          ? [
+              { label: "Summit Pathways", href: "/pathways" },
+              { label: "Interventions", href: "/pathways/interventions" },
+              { label: studentName },
+            ]
+          : [
+              { label: "Summit Pathways", href: "/pathways" },
+              { label: "Students", href: "/pathways/students" },
+              { label: studentName },
+            ]
+      }
+      activeNavItem={from === "interventions" ? "interventions" : "students"}
       isSuperAdmin={isSuperAdmin}
     >
       <PathwaysStudentProfile
@@ -69,6 +79,7 @@ export default async function PathwaysStudentProfilePage({
         interventions={interventions}
         campusName={campusName}
         graduationDate={graduationDate}
+        from={from}
       />
     </PathwaysAppShell>
   );

@@ -597,7 +597,7 @@ export function AdminSetupForm() {
             className="h-7 w-auto"
             priority
           />
-          <span className="text-[20px] font-semibold text-teal-300">Readiness</span>
+          <span className="text-[20px] font-semibold text-teal-300">Pathways</span>
         </div>
         <Link
           href="/pathways"

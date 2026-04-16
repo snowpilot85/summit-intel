@@ -65,7 +65,7 @@ export default async function PathwaysDashboardPage() {
         notificationCount: 0,
       }}
       breadcrumbs={[
-        { label: "Summit Readiness", href: "/pathways" },
+        { label: "Summit Pathways", href: "/pathways" },
         { label: "Dashboard" },
       ]}
       activeNavItem="dashboard"

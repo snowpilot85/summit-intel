@@ -5,7 +5,7 @@ import { getUserContext } from "@/lib/db/users";
 import { AdminSetupForm } from "./setup-form";
 
 export const metadata = {
-  title: "District Setup | Summit Readiness Admin",
+  title: "District Setup | Summit Pathways Admin",
 };
 
 export default async function AdminSetupPage() {

@@ -12,7 +12,7 @@ import {
 import type { CampusCCMRSummaryRow, CampusRow } from "@/types/database";
 
 /* ============================================
-   Summit Readiness — A-F Accountability Simulator
+   Summit Pathways — A-F Accountability Simulator
    TEA 2025 Chapter 5 math, live slider updates
    ============================================ */
 
@@ -261,10 +261,10 @@ export function AFSimulatorPage({ summaries, campuses }: AFSimulatorPageProps) {
   const [selectedId, setSelectedId] = React.useState<string>(defaultId);
   const [ccmrAdd, setCcmrAdd]       = React.useState(0);
   const [edAdd, setEdAdd]           = React.useState(0);
-  const [staarRaw, setStaarRaw]     = React.useState(50);
-  const [partA, setPartA]           = React.useState(65);
-  const [gradRate, setGradRate]     = React.useState(90);
-  const [ctgScaled, setCtgScaled]   = React.useState(70);
+  const [staarScaled, setStaarScaled]   = React.useState(70);
+  const [partA, setPartA]               = React.useState(65);
+  const [gradRateScaled, setGradRateScaled] = React.useState(82);
+  const [ctgScaled, setCtgScaled]       = React.useState(70);
   const [advOpen, setAdvOpen]       = React.useState(false);
   const [gradeFlash, setGradeFlash] = React.useState(false);
   const prevGradeRef = React.useRef<string | null>(null);
@@ -291,9 +291,9 @@ export function AFSimulatorPage({ summaries, campuses }: AFSimulatorPageProps) {
     totalSeniors:         selected.total_seniors,
     documentedED,
     missingEdForms:       selected.missing_ed_forms,
-    staarRaw,
+    staarScaled,
     academicGrowthPartA:  partA,
-    gradRatePct:          gradRate,
+    gradRateScaled,
     closingGapsScaled:    ctgScaled,
   };
 
@@ -465,30 +465,28 @@ export function AFSimulatorPage({ summaries, campuses }: AFSimulatorPageProps) {
                 </p>
                 <div className="grid grid-cols-2 gap-4">
                   <NumInput
-                    label="STAAR performance %"
-                    value={staarRaw}
-                    onChange={setStaarRaw}
-                    hint="% of students meeting grade level on STAAR (all subjects)"
-                    suffix="%"
+                    label="STAAR scaled score (0–100)"
+                    value={staarScaled}
+                    onChange={setStaarScaled}
+                    hint="Scaled STAAR component score as shown on your TXSchools.gov accountability page"
                   />
                   <NumInput
-                    label="Graduation rate %"
-                    value={gradRate}
-                    onChange={setGradRate}
-                    hint="4-year federal graduation rate"
-                    suffix="%"
+                    label="Grad rate scaled score (0–100)"
+                    value={gradRateScaled}
+                    onChange={setGradRateScaled}
+                    hint="Scaled graduation rate component score as shown on your TXSchools.gov accountability page"
                   />
                   <NumInput
-                    label="Academic Growth (Part A)"
+                    label="Academic Growth scaled score (0–100)"
                     value={partA}
                     onChange={setPartA}
-                    hint="Already-scaled Part A score from your TEA report (0-100)"
+                    hint="School Progress Part A (Academic Growth) scaled score from your TXSchools.gov accountability page"
                   />
                   <NumInput
-                    label="Closing the Gaps"
+                    label="Closing the Gaps scaled score (0–100)"
                     value={ctgScaled}
                     onChange={setCtgScaled}
-                    hint="Already-scaled Closing the Gaps domain score from your TEA report (0-100)"
+                    hint="Closing the Gaps domain scaled score from your TXSchools.gov accountability page"
                   />
                 </div>
               </div>

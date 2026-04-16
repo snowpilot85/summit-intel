@@ -11,7 +11,7 @@ import { getCampuses } from "@/lib/db/campuses";
 import { getUserContext } from "@/lib/db/users";
 
 export const metadata: Metadata = {
-  title: "Interventions | Summit Readiness",
+  title: "Interventions | Summit Pathways",
   description: "CCMR intervention pathways sorted by potential impact",
 };
 
@@ -41,9 +41,10 @@ export default async function Page() {
       .eq("grade_level", 12),
   ]);
 
+  // Load active + dismissed (not completed/expired — those could be huge)
   const activeInterventions = interventions.filter((i) =>
-    (["recommended", "planned", "in_progress"] as const).includes(
-      i.status as "recommended" | "planned" | "in_progress"
+    (["recommended", "planned", "in_progress", "dismissed"] as const).includes(
+      i.status as "recommended" | "planned" | "in_progress" | "dismissed"
     )
   );
 
@@ -62,7 +63,7 @@ export default async function Page() {
         notificationCount: 0,
       }}
       breadcrumbs={[
-        { label: "Summit Readiness", href: "/pathways" },
+        { label: "Summit Pathways", href: "/pathways" },
         { label: "Interventions" },
       ]}
       activeNavItem="interventions"

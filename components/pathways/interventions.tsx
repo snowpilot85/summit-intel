@@ -5,18 +5,26 @@ import { cn } from "@/lib/utils";
 import Link from "next/link";
 import {
   AlertCircle,
-  CheckCircle2,
-  ChevronRight,
-  Search,
-  ChevronDown,
-  ChevronLeft,
   Award,
   BookOpen,
-  ClipboardList,
-  Clock,
   CalendarClock,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Clock,
+  EyeOff,
+  Eye,
+  Loader2,
+  MessageSquare,
+  RefreshCw,
+  Search,
+  X,
 } from "lucide-react";
-import { markInterventionComplete } from "@/app/pathways/interventions/actions";
+import {
+  updateInterventionStatus,
+  updateInterventionNotes,
+  refreshRecommendations,
+} from "@/app/pathways/interventions/actions";
 import type {
   CampusRow,
   CCMRReadiness,
@@ -33,12 +41,13 @@ import type {
 // CONSTANTS
 // ============================================
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 20;
 
-// Pathway type classification helpers
 const isIBC = (t: string | null) => t === "ibc";
-const isCollegePrep = (t: string | null) => t === "college_prep_math" || t === "college_prep_ela" || t === "college_prep";
-const isTSI = (t: string | null) => t === "tsi_reading" || t === "tsi_math" || t === "tsi";
+const isCollegePrep = (t: string | null) =>
+  t === "college_prep_math" || t === "college_prep_ela" || t === "college_prep";
+const isTSI = (t: string | null) =>
+  t === "tsi_reading" || t === "tsi_math" || t === "tsi";
 
 const PATHWAY_LABEL: Record<string, string> = {
   ibc: "IBC",
@@ -48,19 +57,14 @@ const PATHWAY_LABEL: Record<string, string> = {
   college_prep_ela: "College Prep ELA",
   college_prep_math: "College Prep Math",
   college_prep: "College Prep",
+  dual_credit: "Dual Credit",
+  dual_credit_ela: "Dual Credit ELA",
+  dual_credit_math: "Dual Credit Math",
 };
 
 // ============================================
 // HELPERS
 // ============================================
-
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
 
 function daysUntil(dateStr: string): number {
   const today = new Date();
@@ -70,23 +74,28 @@ function daysUntil(dateStr: string): number {
   return Math.ceil((target.getTime() - today.getTime()) / 86_400_000);
 }
 
+function formatShortDate(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  });
+}
+
 // ============================================
 // TYPES
 // ============================================
-
-type ActiveStatus = "recommended" | "planned" | "in_progress";
 
 type PathwayFilter = "all" | "ibc" | "college_prep" | "tsi";
 
 interface Filters {
   campusId: string;
   pathway: PathwayFilter;
-  status: ActiveStatus | "all";
+  status: InterventionStatus | "all";
   search: string;
 }
 
 // ============================================
-// CCMR STATUS BADGE (small)
+// CCMR STATUS BADGE
 // ============================================
 
 const READINESS_CONFIG: Record<CCMRReadiness, { label: string; className: string }> = {
@@ -99,32 +108,6 @@ const READINESS_CONFIG: Record<CCMRReadiness, { label: string; className: string
 
 const CCMRBadge = ({ readiness }: { readiness: CCMRReadiness }) => {
   const { label, className } = READINESS_CONFIG[readiness] ?? READINESS_CONFIG.too_early;
-  return (
-    <span className={cn("px-2 py-0.5 rounded-full text-[11px] font-medium", className)}>
-      {label}
-    </span>
-  );
-};
-
-// ============================================
-// INTERVENTION STATUS BADGE
-// ============================================
-
-const INTERVENTION_STATUS_CONFIG: Record<
-  InterventionStatus,
-  { label: string; className: string }
-> = {
-  recommended: { label: "Recommended", className: "bg-primary-100 text-primary-700" },
-  planned: { label: "Planned", className: "bg-amber-100 text-amber-700" },
-  in_progress: { label: "In progress", className: "bg-teal-100 text-teal-700" },
-  completed: { label: "Completed", className: "bg-neutral-100 text-neutral-500" },
-  expired: { label: "Expired", className: "bg-neutral-100 text-neutral-500" },
-  dismissed: { label: "Dismissed", className: "bg-neutral-100 text-neutral-500" },
-};
-
-const InterventionStatusBadge = ({ status }: { status: InterventionStatus }) => {
-  const { label, className } =
-    INTERVENTION_STATUS_CONFIG[status] ?? INTERVENTION_STATUS_CONFIG.recommended;
   return (
     <span className={cn("px-2 py-0.5 rounded-full text-[11px] font-medium", className)}>
       {label}
@@ -160,8 +143,7 @@ const SummaryCard = ({
   iconBg,
 }: SummaryCardProps) => {
   const isActive = activeFilter === pathwayKey;
-  const impactPct =
-    seniorCount > 0 ? Math.round((count / seniorCount) * 100) : 0;
+  const impactPct = seniorCount > 0 ? Math.round((count / seniorCount) * 100) : 0;
 
   return (
     <div
@@ -175,18 +157,16 @@ const SummaryCard = ({
     >
       <div className="flex items-start justify-between gap-3">
         <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0", iconBg)}>
-          <Icon className="w-4.5 h-4.5 text-neutral-0 w-5 h-5" />
+          <Icon className="w-5 h-5 text-neutral-0" />
         </div>
         <span className="px-2.5 py-1 bg-teal-50 text-teal-700 text-[11px] font-semibold rounded-full border border-teal-200">
           +{impactPct}% CCMR if all pass
         </span>
       </div>
-
       <div>
         <h3 className="text-[15px] font-semibold text-neutral-900">{title}</h3>
         <p className="text-[12px] text-neutral-500 mt-0.5">{subtitle}</p>
       </div>
-
       <div className="flex items-center justify-between pt-1 border-t border-neutral-100">
         <span className="text-[22px] font-bold text-neutral-900">
           {count}{" "}
@@ -217,17 +197,23 @@ const SummaryCard = ({
 interface FilterBarProps {
   filters: Filters;
   campuses: CampusRow[];
+  showDismissed: boolean;
   onChange: (f: Filters) => void;
+  onToggleDismissed: () => void;
 }
 
-const FilterBar = ({ filters, campuses, onChange }: FilterBarProps) => {
+const FilterBar = ({
+  filters,
+  campuses,
+  showDismissed,
+  onChange,
+  onToggleDismissed,
+}: FilterBarProps) => {
   const [searchDraft, setSearchDraft] = React.useState(filters.search);
 
   React.useEffect(() => {
     const t = setTimeout(() => {
-      if (searchDraft !== filters.search) {
-        onChange({ ...filters, search: searchDraft });
-      }
+      if (searchDraft !== filters.search) onChange({ ...filters, search: searchDraft });
     }, 300);
     return () => clearTimeout(t);
   }, [searchDraft]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -246,9 +232,7 @@ const FilterBar = ({ filters, campuses, onChange }: FilterBarProps) => {
           >
             <option value="">All campuses</option>
             {campuses.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
+              <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>
           <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 pointer-events-none" />
@@ -273,9 +257,7 @@ const FilterBar = ({ filters, campuses, onChange }: FilterBarProps) => {
         <div className="relative">
           <select
             value={filters.status}
-            onChange={(e) =>
-              set({ status: e.target.value as ActiveStatus | "all" })
-            }
+            onChange={(e) => set({ status: e.target.value as InterventionStatus | "all" })}
             className="appearance-none bg-neutral-0 border border-neutral-200 rounded-md px-3 py-2 pr-8 text-[13px] font-medium text-neutral-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
           >
             <option value="all">All statuses</option>
@@ -287,7 +269,7 @@ const FilterBar = ({ filters, campuses, onChange }: FilterBarProps) => {
         </div>
 
         {/* Search */}
-        <div className="relative flex-1 min-w-[220px]">
+        <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
           <input
             type="text"
@@ -297,30 +279,386 @@ const FilterBar = ({ filters, campuses, onChange }: FilterBarProps) => {
             className="w-full bg-neutral-0 border border-neutral-200 rounded-md pl-9 pr-3 py-2 text-[13px] placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-teal-500"
           />
         </div>
+
+        {/* Show dismissed toggle */}
+        <button
+          onClick={onToggleDismissed}
+          className={cn(
+            "flex items-center gap-1.5 px-3 py-2 rounded-md border text-[13px] font-medium transition-colors",
+            showDismissed
+              ? "bg-neutral-100 border-neutral-300 text-neutral-700"
+              : "border-neutral-200 text-neutral-500 hover:border-neutral-300 hover:text-neutral-700"
+          )}
+        >
+          {showDismissed ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+          {showDismissed ? "Hiding dismissed" : "Show dismissed"}
+        </button>
       </div>
     </div>
   );
 };
 
 // ============================================
-// INTERVENTIONS TABLE
+// NOTES EDITOR
 // ============================================
 
-interface TableRow {
+interface NotesEditorProps {
+  interventionId: string;
+  initialNotes: string | null;
+  onSave: (id: string, notes: string) => void;
+}
+
+const NotesEditor = ({ interventionId, initialNotes, onSave }: NotesEditorProps) => {
+  const [editing, setEditing] = React.useState(false);
+  const [draft, setDraft] = React.useState(initialNotes ?? "");
+  const [savedAt, setSavedAt] = React.useState<Date | null>(null);
+  const [saving, setSaving] = React.useState(false);
+  const textareaRef = React.useRef<HTMLTextAreaElement>(null);
+
+  const handleSave = async () => {
+    if (draft === (initialNotes ?? "")) {
+      setEditing(false);
+      return;
+    }
+    setSaving(true);
+    try {
+      await updateInterventionNotes(interventionId, draft);
+      onSave(interventionId, draft);
+      setSavedAt(new Date());
+    } finally {
+      setSaving(false);
+      setEditing(false);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSave();
+    }
+    if (e.key === "Escape") {
+      setDraft(initialNotes ?? "");
+      setEditing(false);
+    }
+  };
+
+  React.useEffect(() => {
+    if (editing) textareaRef.current?.focus();
+  }, [editing]);
+
+  const displayNotes = draft || initialNotes;
+
+  if (editing) {
+    return (
+      <div className="mt-2">
+        <textarea
+          ref={textareaRef}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={handleSave}
+          onKeyDown={handleKeyDown}
+          rows={2}
+          placeholder="Add a note... (Enter to save, Shift+Enter for newline)"
+          className="w-full text-[12px] text-neutral-700 border border-teal-400 rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-teal-200 resize-none bg-teal-50/30 placeholder:text-neutral-400"
+        />
+        <div className="flex items-center gap-2 mt-1">
+          {saving ? (
+            <span className="text-[11px] text-neutral-400 flex items-center gap-1">
+              <Loader2 className="w-3 h-3 animate-spin" /> Saving…
+            </span>
+          ) : (
+            <span className="text-[11px] text-neutral-400">Enter to save · Esc to cancel</span>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      onClick={() => setEditing(true)}
+      className="mt-2 flex items-start gap-1.5 w-full text-left group"
+    >
+      <MessageSquare className="w-3.5 h-3.5 text-neutral-400 flex-shrink-0 mt-0.5 group-hover:text-teal-500" />
+      {displayNotes ? (
+        <span className="text-[12px] text-neutral-600 group-hover:text-teal-700 line-clamp-2">
+          {displayNotes}
+          {savedAt && (
+            <span className="ml-1.5 text-[11px] text-neutral-400">
+              · saved {savedAt.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+            </span>
+          )}
+        </span>
+      ) : (
+        <span className="text-[12px] text-neutral-400 group-hover:text-teal-600 italic">
+          Add a note…
+        </span>
+      )}
+    </button>
+  );
+};
+
+// ============================================
+// STATUS ACTION BUTTONS
+// ============================================
+
+interface StatusActionsProps {
+  status: InterventionStatus;
+  onStatusChange: (newStatus: InterventionStatus) => void;
+  disabled: boolean;
+}
+
+const StatusActions = ({ status, onStatusChange, disabled }: StatusActionsProps) => {
+  if (status === "recommended") {
+    return (
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => onStatusChange("planned")}
+          disabled={disabled}
+          className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-teal-600 text-neutral-0 text-[12px] font-medium hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          <Check className="w-3 h-3" />
+          Accept
+        </button>
+        <button
+          onClick={() => onStatusChange("dismissed")}
+          disabled={disabled}
+          className="flex items-center gap-1 px-2.5 py-1 rounded-md border border-neutral-200 text-neutral-500 text-[12px] font-medium hover:border-neutral-300 hover:text-neutral-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          <X className="w-3 h-3" />
+          Dismiss
+        </button>
+      </div>
+    );
+  }
+
+  if (status === "planned") {
+    return (
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => onStatusChange("in_progress")}
+          disabled={disabled}
+          className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-primary-500 text-neutral-0 text-[12px] font-medium hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          <Check className="w-3 h-3" />
+          Start
+        </button>
+        <button
+          onClick={() => onStatusChange("dismissed")}
+          disabled={disabled}
+          className="flex items-center gap-1 px-2.5 py-1 rounded-md border border-neutral-200 text-neutral-500 text-[12px] font-medium hover:border-neutral-300 hover:text-neutral-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          <X className="w-3 h-3" />
+          Dismiss
+        </button>
+      </div>
+    );
+  }
+
+  if (status === "in_progress") {
+    return (
+      <button
+        onClick={() => onStatusChange("completed")}
+        disabled={disabled}
+        className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-teal-600 text-neutral-0 text-[12px] font-medium hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+      >
+        <Check className="w-3 h-3" />
+        Mark complete
+      </button>
+    );
+  }
+
+  return null;
+};
+
+// ============================================
+// STATUS PILL
+// ============================================
+
+const STATUS_PILL: Record<InterventionStatus, { label: string; className: string }> = {
+  recommended: { label: "Recommended", className: "bg-primary-100 text-primary-700" },
+  planned: { label: "Planned", className: "bg-amber-100 text-amber-700" },
+  in_progress: { label: "In progress", className: "bg-teal-100 text-teal-700" },
+  completed: { label: "Completed", className: "bg-neutral-100 text-neutral-500" },
+  expired: { label: "Expired", className: "bg-neutral-100 text-neutral-500" },
+  dismissed: { label: "Dismissed", className: "bg-neutral-100 text-neutral-400" },
+};
+
+const StatusPill = ({ status }: { status: InterventionStatus }) => {
+  const { label, className } = STATUS_PILL[status] ?? STATUS_PILL.recommended;
+  return (
+    <span className={cn("px-2 py-0.5 rounded-full text-[11px] font-medium", className)}>
+      {label}
+    </span>
+  );
+};
+
+// ============================================
+// INTERVENTION CARD
+// ============================================
+
+interface InterventionCardProps {
   intervention: InterventionRow;
   student: StudentRow;
   campusName: string;
+  onStatusChange: (id: string, newStatus: InterventionStatus) => void;
+  onNotesSaved: (id: string, notes: string) => void;
+  isPending: boolean;
 }
 
-interface InterventionsTableProps {
-  rows: TableRow[];
-  onMarkComplete: (id: string) => void;
+const InterventionCard = ({
+  intervention,
+  student,
+  campusName,
+  onStatusChange,
+  onNotesSaved,
+  isPending,
+}: InterventionCardProps) => {
+  const days = intervention.due_date ? daysUntil(intervention.due_date) : null;
+  const isUrgent = days !== null && days <= 14;
+  const isOverdue = days !== null && days < 0;
+  const isDismissed = intervention.status === "dismissed";
+  const initials = (student.last_name[0] ?? "") + (student.first_name[0] ?? "");
+  const pathwayLabel = intervention.pathway_type
+    ? (PATHWAY_LABEL[intervention.pathway_type] ?? intervention.pathway_type)
+    : null;
+
+  return (
+    <div
+      className={cn(
+        "bg-neutral-0 border rounded-lg p-4 transition-opacity",
+        isDismissed ? "border-neutral-200 opacity-60" : "border-neutral-200",
+        isOverdue && !isDismissed && "border-l-4 border-l-error"
+      )}
+    >
+      {/* Card header */}
+      <div className="flex items-start gap-3">
+        {/* Avatar */}
+        <Link href={`/pathways/students/${student.id}?from=interventions`} className="flex-shrink-0">
+          <div className="w-9 h-9 bg-teal-100 rounded-full flex items-center justify-center hover:ring-2 hover:ring-teal-300 transition-all">
+            <span className="text-[12px] font-semibold text-teal-700 uppercase">{initials}</span>
+          </div>
+        </Link>
+
+        {/* Student info */}
+        <div className="flex-1 min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href={`/pathways/students/${student.id}?from=interventions`}
+              className="text-[14px] font-semibold text-neutral-900 hover:text-teal-700 transition-colors"
+            >
+              {student.last_name}, {student.first_name}
+            </Link>
+            <CCMRBadge readiness={student.ccmr_readiness} />
+            <StatusPill status={intervention.status} />
+          </div>
+          <div className="flex flex-wrap items-center gap-2 mt-0.5">
+            <span className="text-[12px] text-neutral-500">{campusName}</span>
+            {pathwayLabel && (
+              <>
+                <span className="text-neutral-300">·</span>
+                <span className="text-[12px] text-neutral-500">{pathwayLabel}</span>
+              </>
+            )}
+            <span className="text-neutral-300">·</span>
+            <span className="text-[11px] text-neutral-400">#{student.tsds_id}</span>
+          </div>
+        </div>
+
+        {/* Due date + priority */}
+        <div className="flex-shrink-0 text-right">
+          {intervention.due_date && (
+            <div className="flex items-center gap-1 justify-end">
+              {isUrgent && (
+                <CalendarClock
+                  className={cn(
+                    "w-3.5 h-3.5",
+                    isOverdue ? "text-error" : "text-warning-dark"
+                  )}
+                />
+              )}
+              <span
+                className={cn(
+                  "text-[12px] font-medium",
+                  isOverdue
+                    ? "text-error"
+                    : isUrgent
+                    ? "text-warning-dark"
+                    : "text-neutral-500"
+                )}
+              >
+                {isOverdue
+                  ? `${Math.abs(days!)}d overdue`
+                  : `Due ${formatShortDate(intervention.due_date)}`}
+              </span>
+            </div>
+          )}
+          {intervention.priority && (
+            <span className="text-[11px] text-neutral-400">
+              Priority {intervention.priority}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Intervention content */}
+      <div className="mt-3 pl-12">
+        <p className="text-[13px] font-medium text-neutral-900">{intervention.title}</p>
+        {intervention.description && (
+          <p className="text-[12px] text-neutral-500 mt-0.5 leading-relaxed">
+            {intervention.description}
+          </p>
+        )}
+
+        {/* Notes editor */}
+        {!isDismissed && (
+          <NotesEditor
+            interventionId={intervention.id}
+            initialNotes={intervention.notes}
+            onSave={onNotesSaved}
+          />
+        )}
+
+        {/* Action buttons */}
+        {!isDismissed && (
+          <div className="flex items-center justify-between mt-3 pt-3 border-t border-neutral-100">
+            <Link
+              href={`/pathways/students/${student.id}?from=interventions`}
+              className="text-[12px] font-medium text-primary-500 hover:text-primary-600 transition-colors"
+            >
+              View student profile →
+            </Link>
+            <StatusActions
+              status={intervention.status}
+              onStatusChange={(newStatus) => onStatusChange(intervention.id, newStatus)}
+              disabled={isPending}
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ============================================
+// INTERVENTION LIST
+// ============================================
+
+interface InterventionListProps {
+  rows: { intervention: InterventionRow; student: StudentRow; campusName: string }[];
+  onStatusChange: (id: string, newStatus: InterventionStatus) => void;
+  onNotesSaved: (id: string, notes: string) => void;
+  isPending: boolean;
 }
 
-const InterventionsTable = ({ rows, onMarkComplete }: InterventionsTableProps) => {
+const InterventionList = ({
+  rows,
+  onStatusChange,
+  onNotesSaved,
+  isPending,
+}: InterventionListProps) => {
   const [page, setPage] = React.useState(1);
 
-  // Reset page when rows change
   React.useEffect(() => setPage(1), [rows.length]);
 
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
@@ -329,187 +667,61 @@ const InterventionsTable = ({ rows, onMarkComplete }: InterventionsTableProps) =
   if (rows.length === 0) {
     return (
       <div className="bg-neutral-0 border border-neutral-200 rounded-lg p-12 text-center">
-        <ClipboardList className="w-8 h-8 text-neutral-300 mx-auto mb-3" />
-        <p className="text-[14px] font-medium text-neutral-600">No interventions match the current filters.</p>
-        <p className="text-[13px] text-neutral-400 mt-1">Try adjusting campus, pathway, or status filters.</p>
+        <p className="text-[14px] font-medium text-neutral-600">
+          No interventions match the current filters.
+        </p>
+        <p className="text-[13px] text-neutral-400 mt-1">
+          Try adjusting campus, pathway, or status filters.
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="bg-neutral-0 border border-neutral-200 rounded-lg overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr className="bg-neutral-50 border-b border-neutral-200">
-              <th className="text-left text-[12px] font-semibold text-neutral-700 px-4 py-3">Student</th>
-              <th className="text-left text-[12px] font-semibold text-neutral-700 px-4 py-3">Campus</th>
-              <th className="text-left text-[12px] font-semibold text-neutral-700 px-4 py-3">CCMR</th>
-              <th className="text-left text-[12px] font-semibold text-neutral-700 px-4 py-3">Intervention</th>
-              <th className="text-left text-[12px] font-semibold text-neutral-700 px-4 py-3">Pathway</th>
-              <th className="text-left text-[12px] font-semibold text-neutral-700 px-4 py-3">Status</th>
-              <th className="text-left text-[12px] font-semibold text-neutral-700 px-4 py-3">Due date</th>
-              <th className="text-left text-[12px] font-semibold text-neutral-700 px-4 py-3">Assigned to</th>
-              <th className="text-right text-[12px] font-semibold text-neutral-700 px-4 py-3">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {pageRows.map(({ intervention, student, campusName }) => {
-              const days = intervention.due_date ? daysUntil(intervention.due_date) : null;
-              const isUrgent = days !== null && days <= 14;
-              const isOverdue = days !== null && days < 0;
-              const initials = (student.last_name[0] ?? "") + (student.first_name[0] ?? "");
-
-              return (
-                <tr
-                  key={intervention.id}
-                  className={cn(
-                    "border-b border-neutral-100 last:border-0 hover:bg-neutral-50 transition-colors",
-                    isOverdue && "border-l-4 border-l-error"
-                  )}
-                >
-                  {/* Student */}
-                  <td className="px-4 py-3">
-                    <Link
-                      href={`/pathways/students/${student.id}`}
-                      className="flex items-center gap-2.5 group"
-                    >
-                      <div className="w-8 h-8 bg-teal-100 rounded-full flex items-center justify-center flex-shrink-0">
-                        <span className="text-[11px] font-semibold text-teal-700 uppercase">{initials}</span>
-                      </div>
-                      <div>
-                        <p className="text-[13px] font-medium text-neutral-900 group-hover:text-teal-700">
-                          {student.last_name}, {student.first_name}
-                        </p>
-                        <p className="text-[11px] text-neutral-500">#{student.tsds_id}</p>
-                      </div>
-                    </Link>
-                  </td>
-
-                  {/* Campus */}
-                  <td className="px-4 py-3 text-[13px] text-neutral-700">{campusName}</td>
-
-                  {/* CCMR status */}
-                  <td className="px-4 py-3">
-                    <CCMRBadge readiness={student.ccmr_readiness} />
-                  </td>
-
-                  {/* Intervention title */}
-                  <td className="px-4 py-3">
-                    <p className="text-[13px] font-medium text-neutral-900">{intervention.title}</p>
-                    {intervention.description && (
-                      <p className="text-[11px] text-neutral-500 mt-0.5 max-w-[200px] truncate">
-                        {intervention.description}
-                      </p>
-                    )}
-                  </td>
-
-                  {/* Pathway type */}
-                  <td className="px-4 py-3">
-                    <span className="text-[12px] font-medium text-neutral-700">
-                      {intervention.pathway_type
-                        ? (PATHWAY_LABEL[intervention.pathway_type] ?? intervention.pathway_type)
-                        : "—"}
-                    </span>
-                  </td>
-
-                  {/* Status */}
-                  <td className="px-4 py-3">
-                    <InterventionStatusBadge status={intervention.status} />
-                  </td>
-
-                  {/* Due date */}
-                  <td className="px-4 py-3">
-                    {intervention.due_date ? (
-                      <div className="flex items-center gap-1.5">
-                        {isUrgent && (
-                          <CalendarClock
-                            className={cn(
-                              "w-3.5 h-3.5 flex-shrink-0",
-                              isOverdue ? "text-error" : "text-warning-dark"
-                            )}
-                          />
-                        )}
-                        <span
-                          className={cn(
-                            "text-[13px] font-medium",
-                            isOverdue
-                              ? "text-error"
-                              : isUrgent
-                              ? "text-warning-dark"
-                              : "text-neutral-700"
-                          )}
-                        >
-                          {isOverdue
-                            ? `${Math.abs(days!)}d overdue`
-                            : formatDate(intervention.due_date)}
-                        </span>
-                      </div>
-                    ) : (
-                      <span className="text-neutral-400">—</span>
-                    )}
-                  </td>
-
-                  {/* Assigned to */}
-                  <td className="px-4 py-3 text-[13px] text-neutral-600">
-                    {intervention.assigned_to ?? <span className="text-neutral-400">—</span>}
-                  </td>
-
-                  {/* Actions */}
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <Link
-                        href={`/pathways/students/${student.id}`}
-                        className="text-[13px] font-medium text-primary-500 hover:text-primary-600"
-                      >
-                        View
-                      </Link>
-                      <span className="text-neutral-300">·</span>
-                      <button
-                        onClick={() => onMarkComplete(intervention.id)}
-                        className="text-[13px] font-medium text-teal-600 hover:text-teal-700 flex items-center gap-1"
-                      >
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        Done
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+    <div className="space-y-3">
+      {pageRows.map(({ intervention, student, campusName }) => (
+        <InterventionCard
+          key={intervention.id}
+          intervention={intervention}
+          student={student}
+          campusName={campusName}
+          onStatusChange={onStatusChange}
+          onNotesSaved={onNotesSaved}
+          isPending={isPending}
+        />
+      ))}
 
       {/* Pagination */}
-      <div className="px-4 py-3 border-t border-neutral-200 flex items-center justify-between bg-neutral-50">
-        <p className="text-[13px] text-neutral-600">
-          Showing{" "}
-          <span className="font-medium">
-            {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, rows.length)}
-          </span>{" "}
-          of <span className="font-medium">{rows.length}</span> interventions
-        </p>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={page <= 1}
-            className="p-1.5 rounded border border-neutral-200 hover:bg-neutral-100 disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          <span className="text-[13px] text-neutral-600">
-            {page} / {totalPages}
-          </span>
-          <button
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            disabled={page >= totalPages}
-            className="p-1.5 rounded border border-neutral-200 hover:bg-neutral-100 disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between pt-2">
+          <p className="text-[13px] text-neutral-500">
+            Showing{" "}
+            <span className="font-medium">
+              {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, rows.length)}
+            </span>{" "}
+            of <span className="font-medium">{rows.length}</span>
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className="px-3 py-1.5 rounded border border-neutral-200 text-[13px] hover:bg-neutral-50 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Prev
+            </button>
+            <span className="text-[13px] text-neutral-500">
+              {page} / {totalPages}
+            </span>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+              className="px-3 py-1.5 rounded border border-neutral-200 text-[13px] hover:bg-neutral-50 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Next
+            </button>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };
@@ -532,6 +744,7 @@ export const InterventionsPage = ({
   seniorCount,
 }: InterventionsPageProps) => {
   const [interventions, setInterventions] = React.useState(initialInterventions);
+  const [showDismissed, setShowDismissed] = React.useState(false);
   const [pathwayFilter, setPathwayFilter] = React.useState<PathwayFilter>("all");
   const [filters, setFilters] = React.useState<Filters>({
     campusId: "",
@@ -539,9 +752,10 @@ export const InterventionsPage = ({
     status: "all",
     search: "",
   });
+  const [isRefreshing, setIsRefreshing] = React.useState(false);
+  const [refreshMsg, setRefreshMsg] = React.useState<string | null>(null);
   const [isPending, startTransition] = React.useTransition();
 
-  // Keep pathwayFilter in sync with filters.pathway (cards update the filter bar too)
   const handlePathwayCard = (p: PathwayFilter) => {
     setPathwayFilter(p);
     setFilters((f) => ({ ...f, pathway: p }));
@@ -552,7 +766,7 @@ export const InterventionsPage = ({
     setPathwayFilter(f.pathway);
   };
 
-  // Build lookup maps
+  // Lookup maps
   const studentById = React.useMemo(
     () => new Map(students.map((s) => [s.id, s])),
     [students]
@@ -562,33 +776,37 @@ export const InterventionsPage = ({
     [campuses]
   );
 
-  // Summary counts
-  const ibcCount = interventions.filter((i) => isIBC(i.pathway_type)).length;
-  const collegePrepCount = interventions.filter((i) => isCollegePrep(i.pathway_type)).length;
-  const tsiCount = interventions.filter((i) => isTSI(i.pathway_type)).length;
+  // Summary counts (only active interventions)
+  const active = interventions.filter(
+    (i) => i.status === "recommended" || i.status === "planned" || i.status === "in_progress"
+  );
+  const ibcCount         = active.filter((i) => isIBC(i.pathway_type)).length;
+  const collegePrepCount = active.filter((i) => isCollegePrep(i.pathway_type)).length;
+  const tsiCount         = active.filter((i) => isTSI(i.pathway_type)).length;
+
   const atRiskCount = [...new Set(
-    interventions
-      .filter((i) => {
-        const s = studentById.get(i.student_id);
-        return s?.ccmr_readiness === "at_risk";
-      })
+    active
+      .filter((i) => studentById.get(i.student_id)?.ccmr_readiness === "at_risk")
       .map((i) => i.student_id)
   )].length;
 
-  // Apply all filters and sort
-  const filteredRows = React.useMemo<TableRow[]>(() => {
+  // Filtered rows
+  const filteredRows = React.useMemo(() => {
     const searchLower = filters.search.toLowerCase();
 
     return interventions
-      .filter((intervention) => {
-        const student = studentById.get(intervention.student_id);
+      .filter((iv) => {
+        const student = studentById.get(iv.student_id);
         if (!student) return false;
 
+        // Hide dismissed unless toggle is on
+        if (iv.status === "dismissed" && !showDismissed) return false;
+
         if (filters.campusId && student.campus_id !== filters.campusId) return false;
-        if (filters.status !== "all" && intervention.status !== filters.status) return false;
+        if (filters.status !== "all" && iv.status !== filters.status) return false;
 
         if (filters.pathway !== "all") {
-          const pt = intervention.pathway_type;
+          const pt = iv.pathway_type;
           if (filters.pathway === "ibc" && !isIBC(pt)) return false;
           if (filters.pathway === "college_prep" && !isCollegePrep(pt)) return false;
           if (filters.pathway === "tsi" && !isTSI(pt)) return false;
@@ -602,43 +820,86 @@ export const InterventionsPage = ({
         return true;
       })
       .sort((a, b) => {
-        // Priority ascending (1 = highest), null last
+        // Dismissed to the end
+        if (a.status === "dismissed" && b.status !== "dismissed") return 1;
+        if (b.status === "dismissed" && a.status !== "dismissed") return -1;
         const pa = a.priority ?? 99;
         const pb = b.priority ?? 99;
         if (pa !== pb) return pa - pb;
-        // Then due_date ascending, null last
         const da = a.due_date ? new Date(a.due_date).getTime() : Infinity;
         const db = b.due_date ? new Date(b.due_date).getTime() : Infinity;
         return da - db;
       })
-      .map((intervention) => {
-        const student = studentById.get(intervention.student_id)!;
-        const campusName = campusById.get(student.campus_id) ?? "—";
-        return { intervention, student, campusName };
-      });
-  }, [interventions, filters, studentById, campusById]);
+      .map((iv) => ({
+        intervention: iv,
+        student: studentById.get(iv.student_id)!,
+        campusName: campusById.get(studentById.get(iv.student_id)?.campus_id ?? "") ?? "—",
+      }));
+  }, [interventions, filters, showDismissed, studentById, campusById]);
 
-  const handleMarkComplete = (id: string) => {
-    // Optimistic removal
-    setInterventions((prev) => prev.filter((i) => i.id !== id));
+  const handleStatusChange = (id: string, newStatus: InterventionStatus) => {
+    // Optimistic update
+    setInterventions((prev) =>
+      prev.map((i) =>
+        i.id === id ? { ...i, status: newStatus } : i
+      )
+    );
+
     startTransition(async () => {
       try {
-        await markInterventionComplete(id);
+        await updateInterventionStatus(id, newStatus);
       } catch {
-        // Re-add on failure
         setInterventions(initialInterventions);
       }
     });
   };
 
+  const handleNotesSaved = (id: string, notes: string) => {
+    setInterventions((prev) =>
+      prev.map((i) => (i.id === id ? { ...i, notes: notes || null } : i))
+    );
+  };
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    setRefreshMsg(null);
+    try {
+      const { count } = await refreshRecommendations();
+      setRefreshMsg(`Generated ${count} new recommendation${count !== 1 ? "s" : ""}.`);
+      // Reload the page to show new interventions
+      window.location.reload();
+    } catch (e) {
+      setRefreshMsg("Failed to refresh. Please try again.");
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  const dismissedCount = interventions.filter((i) => i.status === "dismissed").length;
+
   return (
     <div className="space-y-6">
       {/* Page header */}
-      <div>
-        <h1 className="text-[24px] font-semibold text-neutral-900">Interventions</h1>
-        <p className="text-[14px] text-neutral-600 mt-1">
-          Counselor action list — at-risk students grouped by CCMR pathway
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-[24px] font-semibold text-neutral-900">Interventions</h1>
+          <p className="text-[14px] text-neutral-600 mt-1">
+            Counselor action list — at-risk seniors grouped by CCMR pathway
+          </p>
+        </div>
+        <div className="flex items-center gap-3 flex-shrink-0">
+          {refreshMsg && (
+            <span className="text-[13px] text-neutral-500">{refreshMsg}</span>
+          )}
+          <button
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            className="flex items-center gap-2 px-4 py-2 rounded-md bg-neutral-0 border border-neutral-200 text-[13px] font-medium text-neutral-700 hover:border-neutral-300 hover:bg-neutral-50 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+          >
+            <RefreshCw className={cn("w-3.5 h-3.5", isRefreshing && "animate-spin")} />
+            Refresh recommendations
+          </button>
+        </div>
       </div>
 
       {/* Alert banner */}
@@ -694,11 +955,35 @@ export const InterventionsPage = ({
       </div>
 
       {/* Filter bar */}
-      <FilterBar campuses={campuses} filters={filters} onChange={handleFilterChange} />
+      <FilterBar
+        campuses={campuses}
+        filters={filters}
+        showDismissed={showDismissed}
+        onChange={handleFilterChange}
+        onToggleDismissed={() => setShowDismissed((v) => !v)}
+      />
 
-      {/* Table */}
-      <div className={cn("transition-opacity duration-150", isPending && "opacity-50")}>
-        <InterventionsTable rows={filteredRows} onMarkComplete={handleMarkComplete} />
+      {/* Dismissed count hint */}
+      {dismissedCount > 0 && !showDismissed && (
+        <p className="text-[12px] text-neutral-400 -mt-3">
+          {dismissedCount} dismissed intervention{dismissedCount !== 1 ? "s" : ""} hidden.{" "}
+          <button
+            onClick={() => setShowDismissed(true)}
+            className="underline hover:text-neutral-600"
+          >
+            Show
+          </button>
+        </p>
+      )}
+
+      {/* Intervention list */}
+      <div className={cn("transition-opacity duration-150", isPending && "opacity-60")}>
+        <InterventionList
+          rows={filteredRows}
+          onStatusChange={handleStatusChange}
+          onNotesSaved={handleNotesSaved}
+          isPending={isPending}
+        />
       </div>
     </div>
   );

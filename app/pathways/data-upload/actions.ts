@@ -5,6 +5,7 @@ import { createClient } from "@/utils/supabase/server";
 import { getAuthContext } from "@/lib/db/users";
 import { createUpload, updateUploadStatus } from "@/lib/db/uploads";
 import { computeCCMRReadiness } from "@/lib/ccmr";
+import { generateInterventions } from "@/lib/interventions/generate";
 import type {
   IndicatorType,
   UploadSourceType,
@@ -359,9 +360,45 @@ export async function importRows(
         )
       );
     }
+
+    // ── Phase 8: Regenerate interventions for affected at-risk/almost seniors ─
+    const atRiskIds = readinessUpdates
+      .filter((u) => {
+        const p = processed.find((pr) => pr.studentId === u.id);
+        return (
+          p?.gradeLevel === 12 &&
+          (u.ccmr_readiness === "at_risk" || u.ccmr_readiness === "almost")
+        );
+      })
+      .map((u) => u.id);
+
+    if (atRiskIds.length > 0) {
+      const [{ data: atRiskStudents }, { data: atRiskIndicators }] =
+        await Promise.all([
+          queryClient.from("students").select("*").in("id", atRiskIds),
+          queryClient
+            .from("ccmr_indicators")
+            .select("*")
+            .in("student_id", atRiskIds),
+        ]);
+
+      await queryClient
+        .from("interventions")
+        .delete()
+        .eq("status", "recommended")
+        .in("student_id", atRiskIds);
+
+      const newInterventions = generateInterventions(
+        atRiskStudents ?? [],
+        atRiskIndicators ?? [],
+      );
+      if (newInterventions.length > 0) {
+        await queryClient.from("interventions").insert(newInterventions);
+      }
+    }
   }
 
-  // ── Phase 8: Finalize ──────────────────────────────────────────────────────
+  // ── Phase 9: Finalize ──────────────────────────────────────────────────────
   const imported = processed.length;
 
   await updateUploadStatus(queryClient, upload.id, {

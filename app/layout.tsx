@@ -9,8 +9,8 @@ const lexend = Lexend({
 });
 
 export const metadata: Metadata = {
-  title: 'Summit Readiness - CCMR Dashboard',
-  description: 'Summit Readiness College, Career & Military Readiness Dashboard',
+  title: 'Summit Pathways - CCMR Dashboard',
+  description: 'Summit Pathways College, Career & Military Readiness Dashboard',
   generator: 'v0.app',
 }
 

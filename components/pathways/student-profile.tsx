@@ -28,7 +28,7 @@ import type {
 } from "@/types/database";
 
 /* ============================================
-   Summit Readiness — Student Profile
+   Summit Pathways — Student Profile
    ============================================ */
 
 // ============================================
@@ -669,6 +669,7 @@ export interface StudentProfileProps {
   interventions: InterventionRow[];
   campusName: string;
   graduationDate: string | null;
+  from?: string;
 }
 
 export const PathwaysStudentProfile = ({
@@ -677,16 +678,22 @@ export const PathwaysStudentProfile = ({
   interventions,
   campusName,
   graduationDate,
+  from,
 }: StudentProfileProps) => {
+  const backHref =
+    from === "interventions" ? "/pathways/interventions" : "/pathways/students";
+  const backLabel =
+    from === "interventions" ? "Back to Interventions" : "Back to Students";
+
   return (
     <div className="space-y-6">
       {/* Back link */}
       <Link
-        href="/pathways/students"
+        href={backHref}
         className="inline-flex items-center gap-1 text-[13px] font-medium text-primary-500 hover:text-primary-600"
       >
         <ChevronRight className="w-4 h-4 rotate-180" />
-        Back to Students
+        {backLabel}
       </Link>
 
       {/* Header (includes alert banner) */}

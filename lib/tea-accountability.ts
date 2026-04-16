@@ -181,11 +181,14 @@ export interface SimulatorInput {
   ccmrAdditions: number
   /** ED slider: how many additional ED forms collected */
   edAdditions: number
-  /** District-entered additional inputs */
-  staarRaw: number             // raw STAAR performance %
-  academicGrowthPartA: number  // already-scaled Part A score (from prior TEA report)
-  gradRatePct: number          // raw graduation rate %
-  closingGapsScaled: number    // already-scaled Closing the Gaps score
+  /**
+   * Already-scaled scores as shown on TXSchools.gov (0-100).
+   * These are passed directly into domain calculations — no further scaling applied.
+   */
+  staarScaled: number          // STAAR scaled score from TEA report
+  academicGrowthPartA: number  // Academic Growth (Part A) scaled score
+  gradRateScaled: number       // Graduation Rate scaled score
+  closingGapsScaled: number    // Closing the Gaps scaled score
 }
 
 export interface SimulatorResult {
@@ -209,11 +212,8 @@ export function simulate(input: SimulatorInput): SimulatorResult {
   const {
     ccmrMet, totalSeniors, documentedED, missingEdForms,
     ccmrAdditions, edAdditions,
-    staarRaw, academicGrowthPartA, gradRatePct, closingGapsScaled,
+    staarScaled, academicGrowthPartA, gradRateScaled, closingGapsScaled,
   } = input
-
-  const staarScaled    = scaleSTAAR(staarRaw)
-  const gradRateScaled = scaleGradRate(gradRatePct)
 
   if (totalSeniors === 0) {
     return {

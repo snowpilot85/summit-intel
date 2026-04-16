@@ -9,7 +9,7 @@ import { getCampusSummaries, getCampuses } from "@/lib/db/campuses";
 import { getUserContext } from "@/lib/db/users";
 
 export const metadata: Metadata = {
-  title: "Campus Reports | Summit Readiness",
+  title: "Campus Reports | Summit Pathways",
   description: "CCMR breakdown by campus with action plans",
 };
 
@@ -49,7 +49,7 @@ export default async function Page() {
         notificationCount: 0,
       }}
       breadcrumbs={[
-        { label: "Summit Readiness", href: "/pathways" },
+        { label: "Summit Pathways", href: "/pathways" },
         { label: "Campus Reports" },
       ]}
       activeNavItem="campus-reports"
