@@ -43,6 +43,7 @@ interface PathwaysDashboardProps {
   initialSnapshots: SnapshotRow[];
   initialIndicators: IndicatorCount[];
   initialPathwayMetrics: PathwayMetrics;
+  hasCCMR: boolean;
 }
 
 // ============================================
@@ -792,6 +793,7 @@ export const PathwaysDashboard = ({
   initialSnapshots,
   initialIndicators,
   initialPathwayMetrics,
+  hasCCMR,
 }: PathwaysDashboardProps) => {
   const [studentGroup, setStudentGroup] = React.useState<StudentGroup>("all");
   const [isLoading, setIsLoading] = React.useState(false);
@@ -899,7 +901,7 @@ export const PathwaysDashboard = ({
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-[24px] font-semibold text-neutral-900">
-              CCMR Dashboard
+              Pathways Dashboard
             </h1>
             <p className="text-[14px] text-neutral-600 mt-1">
               District-wide college, career, and military readiness overview
@@ -921,10 +923,12 @@ export const PathwaysDashboard = ({
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-[24px] font-semibold text-neutral-900">
-            CCMR Dashboard
+            Pathways Dashboard
           </h1>
           <p className="text-[14px] text-neutral-600 mt-1">
-            District-wide college, career, and military readiness overview
+            {hasCCMR
+              ? "District-wide college, career, and military readiness overview"
+              : "District-wide career and technical education pathway overview"}
           </p>
         </div>
         {isLoading && (
@@ -942,7 +946,7 @@ export const PathwaysDashboard = ({
       />
 
       {/* Summary Metrics */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+      <div className={cn("grid gap-4", hasCCMR ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-5" : "grid-cols-2 lg:grid-cols-2")}>
         <MetricCard
           label={`Total 9-12 ${
             groupLabel !== "All students"
@@ -957,39 +961,43 @@ export const PathwaysDashboard = ({
           value={summary.seniors.toLocaleString()}
           detail="Graduating this year"
         />
-        <MetricCard
-          label="CCMR met (seniors)"
-          value={`${summary.ccmrPercent}%`}
-          detail={`${summary.ccmrMet.toLocaleString()} students`}
-          color={
-            summary.ccmrPercent >= 70
-              ? "blue"
-              : summary.ccmrPercent >= 60
-              ? "amber"
-              : "red"
-          }
-        />
-        <MetricCard
-          label="On track (grades 9-11)"
-          value={`${summary.onTrackPercent}%`}
-          detail={`${summary.onTrack.toLocaleString()} / ${summary.onTrackTotal.toLocaleString()}`}
-          trend="Met 1+ indicator so far"
-          color="teal"
-        />
-        <MetricCard
-          label="At risk seniors"
-          value={summary.atRiskSeniors.toLocaleString()}
-          detail="No indicator met"
-          color="red"
-          badge={summary.atRiskSeniors > 0 ? "ACTION NEEDED" : undefined}
-        />
+        {hasCCMR && (
+          <>
+            <MetricCard
+              label="CCMR met (seniors)"
+              value={`${summary.ccmrPercent}%`}
+              detail={`${summary.ccmrMet.toLocaleString()} students`}
+              color={
+                summary.ccmrPercent >= 70
+                  ? "blue"
+                  : summary.ccmrPercent >= 60
+                  ? "amber"
+                  : "red"
+              }
+            />
+            <MetricCard
+              label="On track (grades 9-11)"
+              value={`${summary.onTrackPercent}%`}
+              detail={`${summary.onTrack.toLocaleString()} / ${summary.onTrackTotal.toLocaleString()}`}
+              trend="Met 1+ indicator so far"
+              color="teal"
+            />
+            <MetricCard
+              label="At risk seniors"
+              value={summary.atRiskSeniors.toLocaleString()}
+              detail="No indicator met"
+              color="red"
+              badge={summary.atRiskSeniors > 0 ? "ACTION NEEDED" : undefined}
+            />
+          </>
+        )}
       </div>
 
       {/* CTE Pathway Metrics */}
       <CtePathwaySection metrics={pathwayMetrics} groupLabel={groupLabel} />
 
-      {/* Comparison Banner (only for subgroups with a gap) */}
-      {comparisonBanner && (
+      {/* Comparison Banner — CCMR districts only (gap is a CCMR-specific metric) */}
+      {hasCCMR && comparisonBanner && (
         <ComparisonBanner
           text={comparisonBanner.text}
           gap={comparisonBanner.gap}
@@ -997,14 +1005,16 @@ export const PathwaysDashboard = ({
         />
       )}
 
-      {/* Two Column Layout: Indicators + Campus */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <CCMRByIndicatorChart data={indicatorData} groupLabel={groupLabel} />
-        <CCMRByCampusTable data={campusData} groupLabel={groupLabel} />
-      </div>
+      {/* Two Column Layout: CCMR Indicators + Campus — TX only */}
+      {hasCCMR && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <CCMRByIndicatorChart data={indicatorData} groupLabel={groupLabel} />
+          <CCMRByCampusTable data={campusData} groupLabel={groupLabel} />
+        </div>
+      )}
 
-      {/* At-Risk Alert Section */}
-      {summary.atRiskSeniors > 0 && (
+      {/* At-Risk Alert — CCMR districts only */}
+      {hasCCMR && summary.atRiskSeniors > 0 && (
         <div className="bg-warning-light border border-warning/30 rounded-lg p-6">
           <div className="flex items-start gap-3">
             <AlertCircle className="w-6 h-6 text-warning-dark flex-shrink-0 mt-0.5" />
@@ -1043,24 +1053,28 @@ export const PathwaysDashboard = ({
 
       {/* Action Buttons */}
       <div className="flex flex-wrap items-center gap-4">
-        <button className="px-5 py-2.5 bg-teal-600 text-neutral-0 text-[14px] font-medium rounded-md hover:bg-teal-700 transition-colors">
-          Generate{" "}
-          {groupLabel !== "All students" ? groupLabel.toLowerCase() : "full"}{" "}
-          CCMR report
-        </button>
+        {hasCCMR && (
+          <button className="px-5 py-2.5 bg-teal-600 text-neutral-0 text-[14px] font-medium rounded-md hover:bg-teal-700 transition-colors">
+            Generate{" "}
+            {groupLabel !== "All students" ? groupLabel.toLowerCase() : "full"}{" "}
+            CCMR report
+          </button>
+        )}
         <button className="px-5 py-2.5 border border-neutral-200 text-neutral-700 text-[14px] font-medium rounded-md hover:bg-neutral-50 transition-colors flex items-center gap-2">
           <Download className="w-4 h-4" />
           Export data
         </button>
-        <a
-          href="https://tea.texas.gov/reports-and-data/school-performance/accountability-research/accountability-reports"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-[14px] font-medium text-primary-500 hover:text-primary-600 flex items-center gap-1"
-        >
-          View TEA CCMR Tracker
-          <ExternalLink className="w-4 h-4" />
-        </a>
+        {hasCCMR && (
+          <a
+            href="https://tea.texas.gov/reports-and-data/school-performance/accountability-research/accountability-reports"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[14px] font-medium text-primary-500 hover:text-primary-600 flex items-center gap-1"
+          >
+            View TEA CCMR Tracker
+            <ExternalLink className="w-4 h-4" />
+          </a>
+        )}
       </div>
     </div>
   );

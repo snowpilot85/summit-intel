@@ -554,7 +554,15 @@ function SummaryBar({ data }: { data: ClusterExplorerData }) {
 
 // ── Root Component ────────────────────────────────────────────
 
-export function ClusterExplorer({ data }: { data: ClusterExplorerData }) {
+export function ClusterExplorer({
+  data,
+  hasCCMR,
+  accountabilitySystem,
+}: {
+  data: ClusterExplorerData;
+  hasCCMR: boolean;
+  accountabilitySystem: string;
+}) {
   const [expandedId, setExpandedId] = React.useState<string | null>(null);
   const [search, setSearch] = React.useState("");
 
@@ -568,6 +576,17 @@ export function ClusterExplorer({ data }: { data: ClusterExplorerData }) {
 
   function toggle(id: string) {
     setExpandedId((prev) => (prev === id ? null : id));
+  }
+
+  if (!hasCCMR && accountabilitySystem === "placeholder") {
+    return (
+      <div className="bg-neutral-50 border border-neutral-200 rounded-lg p-12 text-center">
+        <p className="text-[15px] font-medium text-neutral-700 mb-2">Credential catalog coming soon</p>
+        <p className="text-[13px] text-neutral-500 max-w-md mx-auto">
+          Connecticut credential catalog and labor market data are being configured for your district. Check back soon.
+        </p>
+      </div>
+    );
   }
 
   return (

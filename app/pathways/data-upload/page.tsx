@@ -50,10 +50,12 @@ export default async function Page() {
       ]}
       activeNavItem="data-upload"
       isSuperAdmin={isSuperAdmin}
+      hasCCMR={userCtx.hasCCMR}
     >
       <DataUploadPage
         districtId={districtId}
         initialUploads={(uploads ?? []) as DataUploadRow[]}
+        hasCCMR={userCtx.hasCCMR}
       />
     </PathwaysAppShell>
   );

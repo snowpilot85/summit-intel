@@ -46,6 +46,7 @@ export default async function ClustersPage() {
       ]}
       activeNavItem="clusters"
       isSuperAdmin={isSuperAdmin}
+      hasCCMR={userCtx.hasCCMR}
     >
       <div className="mb-6">
         <h1 className="text-[24px] font-bold text-neutral-900">Career Cluster Explorer</h1>
@@ -53,7 +54,11 @@ export default async function ClustersPage() {
           Browse all career clusters available in your district — programs, credentials, and labor market data.
         </p>
       </div>
-      <ClusterExplorer data={data} />
+      <ClusterExplorer
+        data={data}
+        hasCCMR={userCtx.hasCCMR}
+        accountabilitySystem={userCtx.accountabilitySystem}
+      />
     </PathwaysAppShell>
   );
 }

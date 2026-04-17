@@ -9,8 +9,8 @@ import { getCampusSummaries, getCampuses } from "@/lib/db/campuses";
 import { getUserContext } from "@/lib/db/users";
 
 export const metadata: Metadata = {
-  title: "Campus Reports | Summit Pathways",
-  description: "CCMR breakdown by campus with action plans",
+  title: "Accountability Reports | Summit Pathways",
+  description: "Campus-by-campus accountability breakdown with action plans",
 };
 
 function formatRole(role: string): string {
@@ -50,10 +50,11 @@ export default async function Page() {
       }}
       breadcrumbs={[
         { label: "Summit Pathways", href: "/pathways" },
-        { label: "Campus Reports" },
+        { label: "Accountability Reports (TX)" },
       ]}
       activeNavItem="campus-reports"
       isSuperAdmin={isSuperAdmin}
+      hasCCMR={userCtx.hasCCMR}
     >
       <CampusReportsPage summaries={currentSummaries} campuses={campuses} />
     </PathwaysAppShell>

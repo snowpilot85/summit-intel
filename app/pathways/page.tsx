@@ -71,6 +71,7 @@ export default async function PathwaysDashboardPage() {
       ]}
       activeNavItem="dashboard"
       isSuperAdmin={isSuperAdmin}
+      hasCCMR={userCtx.hasCCMR}
     >
       <PathwaysDashboard
         districtId={districtId}
@@ -79,6 +80,7 @@ export default async function PathwaysDashboardPage() {
         initialSnapshots={snapshots}
         initialIndicators={indicators}
         initialPathwayMetrics={pathwayMetrics}
+        hasCCMR={userCtx.hasCCMR}
       />
     </PathwaysAppShell>
   );

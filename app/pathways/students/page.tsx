@@ -87,6 +87,7 @@ export default async function PathwaysStudentsPage() {
       ]}
       activeNavItem="students"
       isSuperAdmin={isSuperAdmin}
+      hasCCMR={userCtx.hasCCMR}
     >
       <PathwaysStudents
         districtId={districtId}
@@ -97,6 +98,7 @@ export default async function PathwaysStudentsPage() {
         campuses={campuses}
         careerClusters={careerClusters}
         graduationDate={graduationDate}
+        hasCCMR={userCtx.hasCCMR}
       />
     </PathwaysAppShell>
   );

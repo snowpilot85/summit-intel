@@ -171,6 +171,7 @@ export default async function PathwaysStudentProfilePage({
       }
       activeNavItem={from === "interventions" ? "interventions" : "students"}
       isSuperAdmin={isSuperAdmin}
+      hasCCMR={userCtx.hasCCMR}
     >
       <PathwaysStudentProfile
         student={student}
@@ -182,6 +183,7 @@ export default async function PathwaysStudentProfilePage({
         credentialProgress={credentialProgress}
         wblRecords={wblRecords}
         from={from}
+        hasCCMR={userCtx.hasCCMR}
       />
     </PathwaysAppShell>
   );

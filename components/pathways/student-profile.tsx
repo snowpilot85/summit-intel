@@ -180,19 +180,32 @@ interface StudentHeaderProps {
   student: StudentRow;
   campusName: string;
   graduationDate: string | null;
+  hasCCMR: boolean;
+  pathway: StudentPathwayData;
 }
 
-const StudentHeader = ({ student, campusName, graduationDate }: StudentHeaderProps) => {
+const StudentHeader = ({ student, campusName, graduationDate, hasCCMR, pathway }: StudentHeaderProps) => {
   const initials = (student.last_name[0] ?? "") + (student.first_name[0] ?? "");
   const isAtRisk = student.ccmr_readiness === "at_risk";
   const isSenior = student.grade_level === 12;
   const daysLeft = graduationDate ? daysUntil(graduationDate) : null;
   const meta = student.metadata as Record<string, unknown>;
 
+  // Non-CCMR credential status derived from pathway
+  const credentialBadge = pathway?.credentialEarned
+    ? { label: "Credential Earned", className: "bg-teal-600 text-neutral-0" }
+    : pathway?.enrollmentStatus === "enrolled"
+    ? { label: "Pathway Enrolled", className: "bg-primary-500 text-neutral-0" }
+    : pathway?.enrollmentStatus === "completed"
+    ? { label: "Completed", className: "bg-teal-600 text-neutral-0" }
+    : pathway
+    ? { label: pathway.enrollmentStatus, className: "bg-neutral-400 text-neutral-0" }
+    : { label: "No Pathway", className: "bg-neutral-300 text-neutral-600" };
+
   return (
     <div className="space-y-3">
-      {/* Alert banner for at-risk seniors */}
-      {isAtRisk && isSenior && daysLeft !== null && (
+      {/* Alert banner for at-risk seniors — CCMR districts only */}
+      {hasCCMR && isAtRisk && isSenior && daysLeft !== null && (
         <div className="flex items-center gap-3 px-4 py-3 bg-error-light border border-error rounded-lg">
           <AlertTriangle className="w-5 h-5 text-error flex-shrink-0" />
           <p className="text-[13px] font-medium text-error-dark">
@@ -256,12 +269,27 @@ const StudentHeader = ({ student, campusName, graduationDate }: StudentHeaderPro
             </div>
           </div>
 
-          {/* Right: Readiness badge */}
+          {/* Right: status badge — CCMR readiness for TX districts, credential status otherwise */}
           <div className="flex-shrink-0 flex flex-col items-end gap-2">
-            <ReadinessBadgeLarge status={student.ccmr_readiness} />
-            <p className="text-[12px] text-neutral-500">
-              {student.indicators_met_count} indicator{student.indicators_met_count !== 1 ? "s" : ""} met
-            </p>
+            {hasCCMR ? (
+              <>
+                <ReadinessBadgeLarge status={student.ccmr_readiness} />
+                <p className="text-[12px] text-neutral-500">
+                  {student.indicators_met_count} indicator{student.indicators_met_count !== 1 ? "s" : ""} met
+                </p>
+              </>
+            ) : (
+              <>
+                <span className={cn("px-4 py-2 rounded-lg text-[14px] font-bold uppercase tracking-wide", credentialBadge.className)}>
+                  {credentialBadge.label}
+                </span>
+                {pathway && (
+                  <p className="text-[12px] text-neutral-500 text-right max-w-[200px] truncate" title={pathway.programName}>
+                    {pathway.programName}
+                  </p>
+                )}
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -478,6 +506,70 @@ const NearestPathwaySummary = ({
                 <div>
                   <p className={cn("text-[13px] font-semibold", styles.title)}>{path.label}</p>
                   <p className={cn("text-[12px] mt-1 leading-relaxed", styles.text)}>{path.detail}</p>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+// ============================================
+// NEAREST CREDENTIAL PATHS (non-CCMR districts)
+// ============================================
+
+const NearestCredentialPaths = ({ credentialProgress }: { credentialProgress: CredentialProgressItem[] }) => {
+  if (credentialProgress.length === 0) {
+    return (
+      <div className="bg-neutral-0 border border-neutral-200 rounded-lg p-6">
+        <h2 className="text-[18px] font-semibold text-neutral-900 mb-3">Nearest credential paths</h2>
+        <p className="text-[13px] text-neutral-400">No credentials linked to this student&rsquo;s program yet.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-neutral-0 border border-neutral-200 rounded-lg p-6">
+      <h2 className="text-[18px] font-semibold text-neutral-900 mb-4">Nearest credential paths</h2>
+      <div className="space-y-3">
+        {credentialProgress.slice(0, 3).map((item) => {
+          const isEarned = item.status === "earned";
+          const isInProgress = item.status === "in_progress";
+          const bgClass = isEarned
+            ? "bg-teal-50 border-teal-200"
+            : isInProgress
+            ? "bg-primary-50 border-primary-200"
+            : "bg-neutral-50 border-neutral-200";
+          const iconClass = isEarned ? "bg-teal-600" : isInProgress ? "bg-primary-500" : "bg-neutral-300";
+          const titleClass = isEarned ? "text-teal-800" : isInProgress ? "text-primary-800" : "text-neutral-700";
+          const textClass = isEarned ? "text-teal-700" : isInProgress ? "text-primary-600" : "text-neutral-500";
+          const statusLabel = isEarned ? "Earned" : isInProgress ? "In progress" : "Not yet started";
+          return (
+            <div key={item.credentialId} className={cn("p-4 border rounded-lg", bgClass)}>
+              <div className="flex items-start gap-3">
+                <div className={cn("w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5", iconClass)}>
+                  {isEarned
+                    ? <CheckCircle2 className="w-3.5 h-3.5 text-neutral-0" />
+                    : isInProgress
+                    ? <Clock className="w-3.5 h-3.5 text-neutral-0" />
+                    : <GraduationCap className="w-3.5 h-3.5 text-neutral-0" />}
+                </div>
+                <div>
+                  <p className={cn("text-[13px] font-semibold", titleClass)}>
+                    {item.name}
+                    {item.isCapstone && (
+                      <span className="ml-2 text-[10px] font-semibold px-1.5 py-0.5 bg-teal-100 text-teal-700 rounded uppercase tracking-wide">
+                        Capstone
+                      </span>
+                    )}
+                  </p>
+                  <p className={cn("text-[12px] mt-0.5", textClass)}>
+                    {statusLabel}
+                    {item.typicalGrade ? ` · Grade ${item.typicalGrade}` : ""}
+                    {item.passingScore ? ` · Pass: ${item.passingScore}` : ""}
+                  </p>
                 </div>
               </div>
             </div>
@@ -951,6 +1043,7 @@ export interface StudentProfileProps {
   credentialProgress: CredentialProgressItem[];
   wblRecords: WorkBasedLearningRow[];
   from?: string;
+  hasCCMR: boolean;
 }
 
 export const PathwaysStudentProfile = ({
@@ -963,6 +1056,7 @@ export const PathwaysStudentProfile = ({
   credentialProgress,
   wblRecords,
   from,
+  hasCCMR,
 }: StudentProfileProps) => {
   const backHref =
     from === "interventions" ? "/pathways/interventions" : "/pathways/students";
@@ -980,26 +1074,30 @@ export const PathwaysStudentProfile = ({
         {backLabel}
       </Link>
 
-      {/* Header (includes alert banner) */}
+      {/* Header */}
       <StudentHeader
         student={student}
         campusName={campusName}
         graduationDate={graduationDate}
+        hasCCMR={hasCCMR}
+        pathway={pathway ?? null}
       />
 
       {/* Two-column layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left: Pathway + Credential Progress + WBL + Indicator grid (wide) */}
+        {/* Left: Pathway + Credential Progress + WBL + CCMR Indicators (TX only) */}
         <div className="lg:col-span-2 space-y-6">
           <CareerPathwaySection pathway={pathway ?? null} />
           <CredentialProgressSection items={credentialProgress} />
           <WorkBasedLearningSection records={wblRecords} />
-          <CCMRIndicatorGrid indicators={indicators} />
+          {hasCCMR && <CCMRIndicatorGrid indicators={indicators} />}
         </div>
 
-        {/* Right: Nearest pathway + interventions + metadata */}
+        {/* Right: Nearest paths + interventions + metadata */}
         <div className="space-y-6">
-          <NearestPathwaySummary student={student} indicators={indicators} />
+          {hasCCMR
+            ? <NearestPathwaySummary student={student} indicators={indicators} />
+            : <NearestCredentialPaths credentialProgress={credentialProgress} />}
           <ActiveInterventions interventions={interventions} />
           <StudentMetadata
             student={student}

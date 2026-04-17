@@ -1,7 +1,8 @@
 import { cookies } from 'next/headers'
 import { createClient } from '@/utils/supabase/server'
 import { createAdminClient } from '@/utils/supabase/admin'
-import type { TypedSupabaseClient, UserProfileRow } from '@/types/database'
+import type { AccountabilitySystem, TypedSupabaseClient, UserProfileRow } from '@/types/database'
+import { hasCCMRModule } from '@/lib/db/state'
 
 /**
  * Thrown when the auth user exists but has no matching user_profiles row.
@@ -22,6 +23,11 @@ export interface UserContext {
   districtName: string
   schoolYearLabel: string
   graduationDate: string | null
+  // State-awareness — populated whenever districtId is set; null/defaults otherwise
+  stateId: string | null
+  stateCode: string
+  accountabilitySystem: AccountabilitySystem
+  hasCCMR: boolean
 }
 
 /**
@@ -68,11 +74,15 @@ export async function getUserContext(
         districtName: '',
         schoolYearLabel: '2025-26',
         graduationDate: null,
+        stateId: null,
+        stateCode: '',
+        accountabilitySystem: 'placeholder' as AccountabilitySystem,
+        hasCCMR: false,
       }
     }
 
     const [dRes, syRes] = await Promise.all([
-      admin.from('districts').select('name').eq('id', cookieDistrict).single(),
+      admin.from('districts').select('name, state_id, states(code, accountability_system)').eq('id', cookieDistrict).single(),
       admin
         .from('school_years')
         .select('label, graduation_date')
@@ -81,17 +91,25 @@ export async function getUserContext(
         .single(),
     ])
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const dState = (dRes.data as any)?.states as { code: string; accountability_system: string } | null
+    const accountabilitySystem = (dState?.accountability_system ?? 'placeholder') as AccountabilitySystem
+
     return {
       profile: typedProfile,
       districtId: cookieDistrict,
       districtName: dRes.data?.name ?? 'Unknown District',
       schoolYearLabel: syRes.data?.label ?? '2025-26',
       graduationDate: syRes.data?.graduation_date ?? null,
+      stateId: (dRes.data as any)?.state_id ?? null,
+      stateCode: dState?.code ?? '',
+      accountabilitySystem,
+      hasCCMR: hasCCMRModule(accountabilitySystem),
     }
   }
 
   const [districtResult, schoolYearResult] = await Promise.all([
-    admin.from('districts').select('name').eq('id', typedProfile.district_id).single(),
+    admin.from('districts').select('name, state_id, states(code, accountability_system)').eq('id', typedProfile.district_id).single(),
     admin
       .from('school_years')
       .select('label, graduation_date')
@@ -100,12 +118,21 @@ export async function getUserContext(
       .single(),
   ])
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const dState = (districtResult.data as any)?.states as { code: string; accountability_system: string } | null
+  const accountabilitySystem = (dState?.accountability_system ?? 'placeholder') as AccountabilitySystem
+
   return {
     profile: typedProfile,
     districtId: typedProfile.district_id,
     districtName: districtResult.data?.name ?? 'Unknown District',
     schoolYearLabel: schoolYearResult.data?.label ?? '2025-26',
     graduationDate: schoolYearResult.data?.graduation_date ?? null,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    stateId: (districtResult.data as any)?.state_id ?? null,
+    stateCode: dState?.code ?? '',
+    accountabilitySystem,
+    hasCCMR: hasCCMRModule(accountabilitySystem),
   }
 }
 

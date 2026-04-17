@@ -355,17 +355,19 @@ function buildParsedRows(
 // DATA SOURCES STATUS TABLE
 // ============================================
 
-const DATA_SOURCES: {
-  name: string;
-  sourceTypes: UploadSourceType[];
-  format: string;
-}[] = [
-  { name: "CCMR student roster", sourceTypes: ["region_13_tracker", "tea_ccmr_tracker"], format: "Region 13 Excel / CSV" },
-  { name: "SAT/ACT scores", sourceTypes: ["sat_act_scores"], format: "CSV from College Board / ACT" },
-  { name: "TSIA results", sourceTypes: ["tsia_results"], format: "TEA file" },
-  { name: "CTE/IBC data", sourceTypes: ["cte_ibc_data"], format: "SIS export / CSV" },
-  { name: "Dual credit transcripts", sourceTypes: ["dual_credit_transcripts"], format: "CSV" },
-];
+function getDataSources(hasCCMR: boolean): { name: string; sourceTypes: UploadSourceType[]; format: string }[] {
+  return [
+    {
+      name: hasCCMR ? "CCMR student roster" : "Student roster",
+      sourceTypes: ["region_13_tracker", "tea_ccmr_tracker"],
+      format: hasCCMR ? "Region 13 Excel / CSV" : "CSV",
+    },
+    { name: "SAT/ACT scores", sourceTypes: ["sat_act_scores"], format: "CSV from College Board / ACT" },
+    ...(hasCCMR ? [{ name: "TSIA results", sourceTypes: ["tsia_results"] as UploadSourceType[], format: "TEA file" }] : []),
+    { name: "CTE/IBC data", sourceTypes: ["cte_ibc_data"], format: "SIS export / CSV" },
+    { name: "Dual credit transcripts", sourceTypes: ["dual_credit_transcripts"], format: "CSV" },
+  ];
+}
 
 const StatusBadge = ({ status }: { status: "current" | "partial" | "missing" }) => {
   const cfg = {
@@ -382,7 +384,7 @@ const StatusBadge = ({ status }: { status: "current" | "partial" | "missing" }) 
   );
 };
 
-const DataSourcesTable = ({ uploads }: { uploads: DataUploadRow[] }) => {
+const DataSourcesTable = ({ uploads, hasCCMR }: { uploads: DataUploadRow[]; hasCCMR: boolean }) => {
   const latestByType = new Map<UploadSourceType, DataUploadRow>();
   for (const u of uploads) {
     if (u.status === "completed" || u.status === "completed_with_errors") {
@@ -412,7 +414,7 @@ const DataSourcesTable = ({ uploads }: { uploads: DataUploadRow[] }) => {
             </tr>
           </thead>
           <tbody>
-            {DATA_SOURCES.map((source) => {
+            {getDataSources(hasCCMR).map((source) => {
               const latest = source.sourceTypes
                 .map((t) => latestByType.get(t))
                 .filter(Boolean)[0];
@@ -454,9 +456,10 @@ const DataSourcesTable = ({ uploads }: { uploads: DataUploadRow[] }) => {
 interface UploadZoneProps {
   onFile: (file: File) => void;
   isProcessing: boolean;
+  hasCCMR: boolean;
 }
 
-const UploadZone = ({ onFile, isProcessing }: UploadZoneProps) => {
+const UploadZone = ({ onFile, isProcessing, hasCCMR }: UploadZoneProps) => {
   const [isDragOver, setIsDragOver] = React.useState(false);
   const inputRef = React.useRef<HTMLInputElement>(null);
 
@@ -466,8 +469,10 @@ const UploadZone = ({ onFile, isProcessing }: UploadZoneProps) => {
   };
 
   const quickCards: { label: string; sub: string; icon: React.ElementType; color: string }[] = [
-    { label: "Region 13 CCMR Tracker", sub: "Auto-detect class year tabs and indicator columns", icon: FileSpreadsheet, color: "text-teal-600" },
-    { label: "TEA CCMR Tracker", sub: "Official TEA Part I or Part II tracker file", icon: FileText, color: "text-primary-500" },
+    ...(hasCCMR ? [
+      { label: "Region 13 CCMR Tracker", sub: "Auto-detect class year tabs and indicator columns", icon: FileSpreadsheet, color: "text-teal-600" },
+      { label: "TEA CCMR Tracker", sub: "Official TEA Part I or Part II tracker file", icon: FileText, color: "text-primary-500" },
+    ] : []),
     { label: "SAT/ACT scores", sub: "College Board or ACT CSV export", icon: FileSpreadsheet, color: "text-neutral-500" },
     { label: "CTE/IBC data", sub: "CTE enrollment and certification records", icon: FileText, color: "text-neutral-500" },
   ];
@@ -508,7 +513,7 @@ const UploadZone = ({ onFile, isProcessing }: UploadZoneProps) => {
           {isProcessing ? "Reading file…" : "Drop your file here, or click to browse"}
         </p>
         <p className="text-[13px] text-neutral-500">
-          Supported: .xlsx (Region 13 CCMR Tracker), .csv, .tsv
+          {hasCCMR ? "Supported: .xlsx (Region 13 CCMR Tracker), .csv, .tsv" : "Supported: .xlsx, .csv, .tsv"}
         </p>
       </div>
 
@@ -874,12 +879,13 @@ const MISSING_GUIDANCE: {
   { sourceType: "dual_credit_transcripts", label: "Dual credit grade data", unlocks: "Enables at-risk-of-failing alerts for college prep courses" },
 ];
 
-const WhatsMissingCard = ({ uploads }: { uploads: DataUploadRow[] }) => {
+const WhatsMissingCard = ({ uploads, hasCCMR }: { uploads: DataUploadRow[]; hasCCMR: boolean }) => {
   const uploadedTypes = new Set(
     uploads.filter((u) => u.status === "completed" || u.status === "completed_with_errors")
       .map((u) => u.source_type)
   );
-  const missing = MISSING_GUIDANCE.filter((g) => !uploadedTypes.has(g.sourceType));
+  const guidance = hasCCMR ? MISSING_GUIDANCE : MISSING_GUIDANCE.filter((g) => g.sourceType !== "tsia_results");
+  const missing = guidance.filter((g) => !uploadedTypes.has(g.sourceType));
 
   if (missing.length === 0) return null;
 
@@ -921,10 +927,12 @@ const WhatsMissingCard = ({ uploads }: { uploads: DataUploadRow[] }) => {
 export interface DataUploadPageProps {
   districtId: string;
   initialUploads: DataUploadRow[];
+  hasCCMR: boolean;
 }
 
 export const DataUploadPage = ({
   initialUploads,
+  hasCCMR,
 }: DataUploadPageProps) => {
   const [uploads, setUploads] = React.useState<DataUploadRow[]>(initialUploads);
   const [detected, setDetected] = React.useState<DetectedFile | null>(null);
@@ -1021,7 +1029,7 @@ export const DataUploadPage = ({
       <div>
         <h1 className="text-[24px] font-semibold text-neutral-900">Data Upload</h1>
         <p className="text-[14px] text-neutral-600 mt-1">
-          Import CCMR tracker files to keep student indicators current
+          Import student roster and pathway data to keep the platform current
         </p>
       </div>
 
@@ -1048,11 +1056,11 @@ export const DataUploadPage = ({
       )}
 
       {/* Data sources status */}
-      <DataSourcesTable uploads={uploads} />
+      <DataSourcesTable uploads={uploads} hasCCMR={hasCCMR} />
 
       {/* Upload zone — hidden while column mapper is shown */}
       {!detected && (
-        <UploadZone onFile={handleFile} isProcessing={isParsing} />
+        <UploadZone onFile={handleFile} isProcessing={isParsing} hasCCMR={hasCCMR} />
       )}
 
       {/* Column mapper */}
@@ -1072,7 +1080,7 @@ export const DataUploadPage = ({
       <UploadHistoryTable uploads={uploads} />
 
       {/* What's missing */}
-      <WhatsMissingCard uploads={uploads} />
+      <WhatsMissingCard uploads={uploads} hasCCMR={hasCCMR} />
     </div>
   );
 };

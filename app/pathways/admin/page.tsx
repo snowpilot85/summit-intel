@@ -46,6 +46,7 @@ export default async function AdminPage() {
       ]}
       activeNavItem="admin"
       isSuperAdmin={isSuperAdmin}
+      hasCCMR={userCtx.hasCCMR}
     >
       <div className="mb-6">
         <h1 className="text-[24px] font-bold text-neutral-900">District Admin View</h1>

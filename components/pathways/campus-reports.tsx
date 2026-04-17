@@ -878,9 +878,9 @@ export const CampusReportsPage = ({ summaries, campuses }: CampusReportsPageProp
     <div className="space-y-6">
       {/* Page header */}
       <div>
-        <h1 className="text-[24px] font-semibold text-neutral-900">Campus Reports</h1>
+        <h1 className="text-[24px] font-semibold text-neutral-900">Accountability Reports (TX)</h1>
         <p className="text-[14px] text-neutral-600 mt-1">
-          Campus-by-campus CCMR breakdown for principals and district leadership
+          Campus-by-campus accountability breakdown for principals and district leadership
         </p>
       </div>
 

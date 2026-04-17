@@ -68,12 +68,14 @@ export default async function Page() {
       ]}
       activeNavItem="interventions"
       isSuperAdmin={isSuperAdmin}
+      hasCCMR={userCtx.hasCCMR}
     >
       <InterventionsPage
         interventions={activeInterventions}
         students={students}
         campuses={campuses}
         seniorCount={seniorCount}
+        hasCCMR={userCtx.hasCCMR}
       />
     </PathwaysAppShell>
   );

@@ -40,7 +40,7 @@ export function DistrictPicker({ districts, userName }: DistrictPickerProps) {
         <div className="mb-8">
           <h1 className="text-[26px] font-semibold text-neutral-900">Select a district</h1>
           <p className="text-[14px] text-neutral-500 mt-1">
-            Choose a district to view its CCMR dashboard.
+            Choose a district to view its pathway dashboard.
           </p>
         </div>
 

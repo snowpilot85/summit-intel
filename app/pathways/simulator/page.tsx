@@ -44,10 +44,11 @@ export default async function SimulatorPage() {
       }}
       breadcrumbs={[
         { label: "Summit Pathways", href: "/pathways" },
-        { label: "A-F Simulator" },
+        { label: "A-F Simulator (TX)" },
       ]}
       activeNavItem="simulator"
       isSuperAdmin={isSuperAdmin}
+      hasCCMR={userCtx.hasCCMR}
     >
       <AFSimulatorPage summaries={summaries} campuses={campuses} />
     </PathwaysAppShell>

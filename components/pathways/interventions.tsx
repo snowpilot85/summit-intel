@@ -129,6 +129,7 @@ interface SummaryCardProps {
   activeFilter: PathwayFilter;
   onFilter: (p: PathwayFilter) => void;
   iconBg: string;
+  hasCCMR: boolean;
 }
 
 const SummaryCard = ({
@@ -141,6 +142,7 @@ const SummaryCard = ({
   activeFilter,
   onFilter,
   iconBg,
+  hasCCMR,
 }: SummaryCardProps) => {
   const isActive = activeFilter === pathwayKey;
   const impactPct = seniorCount > 0 ? Math.round((count / seniorCount) * 100) : 0;
@@ -159,9 +161,11 @@ const SummaryCard = ({
         <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0", iconBg)}>
           <Icon className="w-5 h-5 text-neutral-0" />
         </div>
-        <span className="px-2.5 py-1 bg-teal-50 text-teal-700 text-[11px] font-semibold rounded-full border border-teal-200">
-          +{impactPct}% CCMR if all pass
-        </span>
+        {hasCCMR && (
+          <span className="px-2.5 py-1 bg-teal-50 text-teal-700 text-[11px] font-semibold rounded-full border border-teal-200">
+            +{impactPct}% CCMR if all pass
+          </span>
+        )}
       </div>
       <div>
         <h3 className="text-[15px] font-semibold text-neutral-900">{title}</h3>
@@ -735,6 +739,62 @@ export interface InterventionsPageProps {
   students: StudentRow[];
   campuses: CampusRow[];
   seniorCount: number;
+  hasCCMR: boolean;
+}
+
+// Credential-based summary cards for non-CCMR districts
+function CredentialGroupCards({ students }: { students: StudentRow[] }) {
+  const seniors = students.filter((s) => s.grade_level === 12).length;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const withPathway = students.filter((s) => !!(s.metadata as any)?.cte_pathway).length;
+  const withoutPathway = students.length - withPathway;
+
+  const cards = [
+    {
+      icon: Award,
+      title: "Seniors needing support",
+      count: seniors,
+      subtitle: "Grade 12 students with open interventions",
+      iconBg: "bg-teal-600",
+    },
+    {
+      icon: BookOpen,
+      title: "With pathway enrolled",
+      count: withPathway,
+      subtitle: "Students in a CTE program of study",
+      iconBg: "bg-primary-500",
+    },
+    {
+      icon: Clock,
+      title: "Missing pathway",
+      count: withoutPathway,
+      subtitle: "Students without a CTE pathway assigned",
+      iconBg: "bg-warning-dark",
+    },
+  ];
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {cards.map((c) => {
+        const Icon = c.icon;
+        return (
+          <div key={c.title} className="bg-neutral-0 border border-neutral-200 rounded-lg p-5 flex flex-col gap-3">
+            <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center", c.iconBg)}>
+              <Icon className="w-5 h-5 text-neutral-0" />
+            </div>
+            <div>
+              <h3 className="text-[15px] font-semibold text-neutral-900">{c.title}</h3>
+              <p className="text-[12px] text-neutral-500 mt-0.5">{c.subtitle}</p>
+            </div>
+            <span className="text-[22px] font-bold text-neutral-900">
+              {c.count}{" "}
+              <span className="text-[13px] font-normal text-neutral-500">students</span>
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 export const InterventionsPage = ({
@@ -742,6 +802,7 @@ export const InterventionsPage = ({
   students,
   campuses,
   seniorCount,
+  hasCCMR,
 }: InterventionsPageProps) => {
   const [interventions, setInterventions] = React.useState(initialInterventions);
   const [showDismissed, setShowDismissed] = React.useState(false);
@@ -884,7 +945,7 @@ export const InterventionsPage = ({
         <div>
           <h1 className="text-[24px] font-semibold text-neutral-900">Interventions</h1>
           <p className="text-[14px] text-neutral-600 mt-1">
-            Counselor action list — at-risk seniors grouped by CCMR pathway
+            Counselor action list — at-risk seniors grouped by credential pathway
           </p>
         </div>
         <div className="flex items-center gap-3 flex-shrink-0">
@@ -911,48 +972,57 @@ export const InterventionsPage = ({
               {atRiskCount} at-risk senior{atRiskCount !== 1 ? "s" : ""} with open interventions
             </p>
             <p className="text-[13px] text-warning-dark/80 mt-0.5">
-              These students have no CCMR indicator met yet. Click a pathway card to filter.
+              {hasCCMR
+                ? "These students have no CCMR indicator met yet. Click a pathway card to filter."
+                : "These students have not yet earned a credential. Review their pathway progress."}
             </p>
           </div>
         </div>
       )}
 
-      {/* Summary cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <SummaryCard
-          icon={Award}
-          title="Industry-based certification"
-          count={ibcCount}
-          seniorCount={seniorCount}
-          subtitle="Students with IBC-aligned CTE enrollment"
-          pathwayKey="ibc"
-          activeFilter={pathwayFilter}
-          onFilter={handlePathwayCard}
-          iconBg="bg-teal-600"
-        />
-        <SummaryCard
-          icon={BookOpen}
-          title="College prep course completion"
-          count={collegePrepCount}
-          seniorCount={seniorCount}
-          subtitle="Enrolled in college prep ELA or Math"
-          pathwayKey="college_prep"
-          activeFilter={pathwayFilter}
-          onFilter={handlePathwayCard}
-          iconBg="bg-primary-500"
-        />
-        <SummaryCard
-          icon={Clock}
-          title="TSI assessment"
-          count={tsiCount}
-          seniorCount={seniorCount}
-          subtitle="Seniors who haven't attempted the TSIA"
-          pathwayKey="tsi"
-          activeFilter={pathwayFilter}
-          onFilter={handlePathwayCard}
-          iconBg="bg-warning-dark"
-        />
-      </div>
+      {/* Summary cards — CCMR pathway groupings (TX) or credential groupings (other) */}
+      {hasCCMR ? (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <SummaryCard
+            icon={Award}
+            title="Industry-based certification"
+            count={ibcCount}
+            seniorCount={seniorCount}
+            subtitle="Students with IBC-aligned CTE enrollment"
+            pathwayKey="ibc"
+            activeFilter={pathwayFilter}
+            onFilter={handlePathwayCard}
+            iconBg="bg-teal-600"
+            hasCCMR={hasCCMR}
+          />
+          <SummaryCard
+            icon={BookOpen}
+            title="College prep course completion"
+            count={collegePrepCount}
+            seniorCount={seniorCount}
+            subtitle="Enrolled in college prep ELA or Math"
+            pathwayKey="college_prep"
+            activeFilter={pathwayFilter}
+            onFilter={handlePathwayCard}
+            iconBg="bg-primary-500"
+            hasCCMR={hasCCMR}
+          />
+          <SummaryCard
+            icon={Clock}
+            title="TSI assessment"
+            count={tsiCount}
+            seniorCount={seniorCount}
+            subtitle="Seniors who haven't attempted the TSIA"
+            pathwayKey="tsi"
+            activeFilter={pathwayFilter}
+            onFilter={handlePathwayCard}
+            iconBg="bg-warning-dark"
+            hasCCMR={hasCCMR}
+          />
+        </div>
+      ) : (
+        <CredentialGroupCards students={students} />
+      )}
 
       {/* Filter bar */}
       <FilterBar

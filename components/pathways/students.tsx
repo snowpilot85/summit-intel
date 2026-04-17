@@ -176,9 +176,10 @@ interface FilterBarProps {
   careerClusters: CareerClusterOption[];
   filters: StudentFilters;
   onChange: (f: StudentFilters) => void;
+  hasCCMR: boolean;
 }
 
-const FilterBar = ({ campuses, careerClusters, filters, onChange }: FilterBarProps) => {
+const FilterBar = ({ campuses, careerClusters, filters, onChange, hasCCMR }: FilterBarProps) => {
   const [searchDraft, setSearchDraft] = React.useState(filters.search ?? "");
 
   // Debounce search
@@ -234,22 +235,24 @@ const FilterBar = ({ campuses, careerClusters, filters, onChange }: FilterBarPro
           <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 pointer-events-none" />
         </div>
 
-        {/* CCMR Status */}
-        <div className="relative">
-          <select
-            value={filters.readiness ?? ""}
-            onChange={(e) => set({ readiness: (e.target.value as CCMRReadiness) || undefined })}
-            className="appearance-none bg-neutral-0 border border-neutral-200 rounded-md px-3 py-2 pr-8 text-[13px] font-medium text-neutral-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
-          >
-            <option value="">All statuses</option>
-            <option value="met">Met</option>
-            <option value="on_track">On track</option>
-            <option value="almost">Almost</option>
-            <option value="at_risk">At risk</option>
-            <option value="too_early">Too early</option>
-          </select>
-          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 pointer-events-none" />
-        </div>
+        {/* CCMR Status — TX only */}
+        {hasCCMR && (
+          <div className="relative">
+            <select
+              value={filters.readiness ?? ""}
+              onChange={(e) => set({ readiness: (e.target.value as CCMRReadiness) || undefined })}
+              className="appearance-none bg-neutral-0 border border-neutral-200 rounded-md px-3 py-2 pr-8 text-[13px] font-medium text-neutral-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
+            >
+              <option value="">All statuses</option>
+              <option value="met">Met</option>
+              <option value="on_track">On track</option>
+              <option value="almost">Almost</option>
+              <option value="at_risk">At risk</option>
+              <option value="too_early">Too early</option>
+            </select>
+            <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 pointer-events-none" />
+          </div>
+        )}
 
         {/* Search */}
         <div className="relative flex-1 min-w-[200px]">
@@ -344,6 +347,7 @@ interface StudentTableProps {
   page: number;
   graduationDate: string | null;
   onPageChange: (p: number) => void;
+  hasCCMR: boolean;
 }
 
 const StudentTable = ({
@@ -355,6 +359,7 @@ const StudentTable = ({
   page,
   graduationDate,
   onPageChange,
+  hasCCMR,
 }: StudentTableProps) => {
   const campusById = React.useMemo(
     () => new Map(campuses.map((c) => [c.id, c.name])),
@@ -391,8 +396,8 @@ const StudentTable = ({
               <th className="text-left text-[12px] font-semibold text-neutral-700 px-4 py-3">Student</th>
               <th className="text-left text-[12px] font-semibold text-neutral-700 px-4 py-3">Campus</th>
               <th className="text-center text-[12px] font-semibold text-neutral-700 px-4 py-3">Grade</th>
-              <th className="text-left text-[12px] font-semibold text-neutral-700 px-4 py-3">CCMR status</th>
-              <th className="text-left text-[12px] font-semibold text-neutral-700 px-4 py-3">Indicators met</th>
+              {hasCCMR && <th className="text-left text-[12px] font-semibold text-neutral-700 px-4 py-3">CCMR status</th>}
+              {hasCCMR && <th className="text-left text-[12px] font-semibold text-neutral-700 px-4 py-3">Indicators met</th>}
               <th className="text-left text-[12px] font-semibold text-neutral-700 px-4 py-3">Career cluster</th>
               <th className="text-left text-[12px] font-semibold text-neutral-700 px-4 py-3">Credential status</th>
               <th className="text-left text-[12px] font-semibold text-neutral-700 px-4 py-3">Next credential</th>
@@ -403,7 +408,7 @@ const StudentTable = ({
           <tbody>
             {students.length === 0 ? (
               <tr>
-                <td colSpan={10} className="px-4 py-10 text-center text-[13px] text-neutral-500">
+                <td colSpan={hasCCMR ? 10 : 8} className="px-4 py-10 text-center text-[13px] text-neutral-500">
                   No students match the current filters.
                 </td>
               </tr>
@@ -471,24 +476,28 @@ const StudentTable = ({
                       {student.grade_level}
                     </td>
 
-                    <td className="px-4 py-4">
-                      <StatusBadge status={student.ccmr_readiness} />
-                    </td>
+                    {hasCCMR && (
+                      <td className="px-4 py-4">
+                        <StatusBadge status={student.ccmr_readiness} />
+                      </td>
+                    )}
 
-                    <td className="px-4 py-4">
-                      {metIndicators.length > 0 || inProgressIndicators.length > 0 ? (
-                        <div className="flex flex-wrap gap-1">
-                          {metIndicators.map((ind) => (
-                            <IndicatorPill key={ind.id} label={indicatorLabel(ind.indicator_type)} />
-                          ))}
-                          {inProgressIndicators.map((ind) => (
-                            <IndicatorPill key={ind.id} label={indicatorLabel(ind.indicator_type)} inProgress />
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="text-[12px] text-neutral-400">None</span>
-                      )}
-                    </td>
+                    {hasCCMR && (
+                      <td className="px-4 py-4">
+                        {metIndicators.length > 0 || inProgressIndicators.length > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {metIndicators.map((ind) => (
+                              <IndicatorPill key={ind.id} label={indicatorLabel(ind.indicator_type)} />
+                            ))}
+                            {inProgressIndicators.map((ind) => (
+                              <IndicatorPill key={ind.id} label={indicatorLabel(ind.indicator_type)} inProgress />
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-[12px] text-neutral-400">None</span>
+                        )}
+                      </td>
+                    )}
 
                     <td className="px-4 py-4 text-[13px] text-neutral-700">
                       {pathwayEntry?.cluster_name ? (
@@ -531,7 +540,7 @@ const StudentTable = ({
                         >
                           View
                         </Link>
-                        {student.ccmr_readiness === "at_risk" && (
+                        {hasCCMR && student.ccmr_readiness === "at_risk" && (
                           <>
                             <span className="text-neutral-300">·</span>
                             <Link
@@ -542,7 +551,7 @@ const StudentTable = ({
                             </Link>
                           </>
                         )}
-                        {student.ccmr_readiness === "almost" && (
+                        {hasCCMR && student.ccmr_readiness === "almost" && (
                           <>
                             <span className="text-neutral-300">·</span>
                             <Link
@@ -608,6 +617,7 @@ interface PathwaysStudentsProps {
   campuses: CampusRow[];
   careerClusters: CareerClusterOption[];
   graduationDate: string | null;
+  hasCCMR: boolean;
 }
 
 export const PathwaysStudents = ({
@@ -618,6 +628,7 @@ export const PathwaysStudents = ({
   campuses,
   careerClusters,
   graduationDate,
+  hasCCMR,
 }: PathwaysStudentsProps) => {
   const [filters, setFilters] = React.useState<StudentFilters>({ page: 1 });
   const [students, setStudents] = React.useState(initialStudents);
@@ -648,7 +659,7 @@ export const PathwaysStudents = ({
       <div>
         <h1 className="text-[24px] font-semibold text-neutral-900">Students</h1>
         <p className="text-[14px] text-neutral-600 mt-1">
-          Full student-level CCMR tracker for grades 9–12
+          Full student-level pathway tracker for grades 6–12
         </p>
       </div>
 
@@ -657,6 +668,7 @@ export const PathwaysStudents = ({
         careerClusters={careerClusters}
         filters={filters}
         onChange={applyFilters}
+        hasCCMR={hasCCMR}
       />
 
       <div className={cn("transition-opacity duration-150", isPending && "opacity-50")}>
@@ -669,6 +681,7 @@ export const PathwaysStudents = ({
           page={currentPage}
           graduationDate={graduationDate}
           onPageChange={(p) => applyFilters({ ...filters, page: p })}
+          hasCCMR={hasCCMR}
         />
       </div>
     </div>

@@ -257,23 +257,27 @@ const pathwaysNavItems = [
   { id: "students", label: "Students", icon: Users, href: "/pathways/students" },
   { id: "interventions", label: "Interventions", icon: Target, href: "/pathways/interventions" },
   { id: "clusters", label: "Cluster Explorer", icon: Compass, href: "/pathways/clusters" },
-  { id: "campus-reports", label: "Campus Reports", icon: Building2, href: "/pathways/campus-reports" },
+  { id: "campus-reports", label: "Accountability Reports (TX)", icon: Building2, href: "/pathways/campus-reports" },
   { id: "admin", label: "District Admin", icon: BarChart3, href: "/pathways/admin" },
-  { id: "simulator", label: "A-F Simulator", icon: Gauge, href: "/pathways/simulator" },
+  { id: "simulator", label: "A-F Simulator (TX)", icon: Gauge, href: "/pathways/simulator" },
   { id: "data-upload", label: "Data Upload", icon: Upload, href: "/pathways/data-upload" },
   { id: "settings", label: "Settings", icon: Settings, href: "/pathways/settings" },
 ];
+
+// Nav item IDs that are only shown for TX (TEA A-F) districts
+const CCMR_ONLY_NAV_IDS = new Set(["campus-reports", "simulator"]);
 
 interface NavRailProps {
   activeItem?: string;
   onItemChange?: (item: string) => void;
   isSuperAdmin?: boolean;
+  hasCCMR?: boolean;
   className?: string;
 }
 
-export const PathwaysNavRail = ({ activeItem = "dashboard", onItemChange, isSuperAdmin, className }: NavRailProps) => {
+export const PathwaysNavRail = ({ activeItem = "dashboard", onItemChange, isSuperAdmin, hasCCMR = true, className }: NavRailProps) => {
   const navItems = [
-    ...pathwaysNavItems,
+    ...pathwaysNavItems.filter((item) => hasCCMR || !CCMR_ONLY_NAV_IDS.has(item.id)),
     ...(isSuperAdmin
       ? [{ id: "admin-setup", label: "Admin Setup", icon: Shield, href: "/admin/setup" }]
       : []),
@@ -327,6 +331,7 @@ interface PathwaysAppShellProps {
   activeNavItem?: string;
   onNavItemChange?: (item: string) => void;
   isSuperAdmin?: boolean;
+  hasCCMR?: boolean;
 }
 
 export const PathwaysAppShell = ({
@@ -339,6 +344,7 @@ export const PathwaysAppShell = ({
   activeNavItem = "dashboard",
   onNavItemChange,
   isSuperAdmin,
+  hasCCMR = true,
 }: PathwaysAppShellProps) => {
   return (
     <div className="min-h-screen flex flex-col bg-neutral-50">
@@ -351,7 +357,7 @@ export const PathwaysAppShell = ({
       {/* Main Layout */}
       <div className="flex flex-1">
         {/* Nav Rail */}
-        <PathwaysNavRail activeItem={activeNavItem} onItemChange={onNavItemChange} isSuperAdmin={isSuperAdmin} />
+        <PathwaysNavRail activeItem={activeNavItem} onItemChange={onNavItemChange} isSuperAdmin={isSuperAdmin} hasCCMR={hasCCMR} />
 
         {/* Main Content */}
         <main className="flex-1 p-4 lg:p-6 pb-20 lg:pb-6">
