@@ -5,12 +5,36 @@ export interface IndicatorInput {
   status: IndicatorStatus
 }
 
-const READING_GROUP: IndicatorType[] = ['tsi_reading', 'sat_reading', 'act_reading']
-const MATH_GROUP: IndicatorType[] = ['tsi_math', 'sat_math', 'act_math']
+// ─────────────────────────────────────────────────────────────────────────────
+// TEA CCMR indicator classification
+//
+// STANDALONE: each independently satisfies CCMR. Meeting ANY ONE = CCMR Met.
+//   - tsi_reading and tsi_math are separate indicators; each alone counts.
+//   - college_prep, dual_credit, and career indicators are all standalone.
+//
+// PAIRED (SAT, ACT): require BOTH subscores in the same administration.
+//   - sat_reading (EBRW ≥ 480) AND sat_math (Math ≥ 530) → one CCMR indicator
+//   - act_reading (English ≥ 19) AND act_math (Math ≥ 19) → one CCMR indicator
+//
+// SAT/ACT subscores CAN independently satisfy TSI exemptions (stored as
+// tsi_reading / tsi_math rows with derivation_source = 'sat' | 'act').
+// ─────────────────────────────────────────────────────────────────────────────
 
-const SINGLE_INDICATORS: IndicatorType[] = [
+const STANDALONE_INDICATORS: IndicatorType[] = [
+  // TSI — each subject independently satisfies CCMR
+  'tsi_reading',
+  'tsi_math',
+  // College Prep — each course independently satisfies CCMR
+  'college_prep_ela',
+  'college_prep_math',
+  // Dual Credit — each pathway independently satisfies CCMR
+  'dual_credit_ela',
+  'dual_credit_math',
+  'dual_credit_any',
+  // Test-based
   'ap_exam',
   'ib_exam',
+  // Career
   'onramps',
   'ibc',
   'associate_degree',
@@ -24,49 +48,29 @@ function isMet(indicators: IndicatorInput[], type: IndicatorType): boolean {
   return indicators.some((i) => i.indicator_type === type && i.status === 'met')
 }
 
-function isInProgress(indicators: IndicatorInput[], type: IndicatorType): boolean {
-  return indicators.some((i) => i.indicator_type === type && i.status === 'in_progress')
+/** SAT College Ready: BOTH EBRW ≥ 480 AND Math ≥ 530 required. */
+function checkSatMet(indicators: IndicatorInput[]): boolean {
+  return isMet(indicators, 'sat_reading') && isMet(indicators, 'sat_math')
 }
 
-function anyMet(indicators: IndicatorInput[], types: IndicatorType[]): boolean {
-  return types.some((t) => isMet(indicators, t))
+/** ACT College Ready: BOTH English ≥ 19 AND Math ≥ 19 required. */
+function checkActMet(indicators: IndicatorInput[]): boolean {
+  return isMet(indicators, 'act_reading') && isMet(indicators, 'act_math')
 }
 
-// Paired pathway checks
-
-function checkReadingMathPaired(indicators: IndicatorInput[]): boolean {
-  return anyMet(indicators, READING_GROUP) && anyMet(indicators, MATH_GROUP)
-}
-
-function checkCollegePrepPaired(indicators: IndicatorInput[]): boolean {
-  return isMet(indicators, 'college_prep_ela') && isMet(indicators, 'college_prep_math')
-}
-
-function checkDualCreditPaired(indicators: IndicatorInput[]): boolean {
-  return (
-    isMet(indicators, 'dual_credit_ela') &&
-    isMet(indicators, 'dual_credit_math') &&
-    isMet(indicators, 'dual_credit_any')
-  )
-}
-
-function checkAnySingle(indicators: IndicatorInput[]): boolean {
-  return SINGLE_INDICATORS.some((t) => isMet(indicators, t))
-}
-
-// "Almost" = one half of a paired pathway is satisfied but not both
+/**
+ * "Almost" (senior-specific): one subscore of a paired indicator is met but
+ * not both. Only SAT and ACT can produce this state — standalone indicators
+ * fully satisfy CCMR on their own so they never produce "almost".
+ */
 function checkAlmost(indicators: IndicatorInput[]): boolean {
-  const readingMet = anyMet(indicators, READING_GROUP)
-  const mathMet = anyMet(indicators, MATH_GROUP)
-  if (readingMet !== mathMet) return true // one side of reading/math pair
+  const satR = isMet(indicators, 'sat_reading')
+  const satM = isMet(indicators, 'sat_math')
+  if (satR !== satM) return true
 
-  if (isMet(indicators, 'college_prep_ela') !== isMet(indicators, 'college_prep_math')) return true
-
-  const dcEla = isMet(indicators, 'dual_credit_ela')
-  const dcMath = isMet(indicators, 'dual_credit_math')
-  const dcAny = isMet(indicators, 'dual_credit_any')
-  const dcMetCount = [dcEla, dcMath, dcAny].filter(Boolean).length
-  if (dcMetCount > 0 && dcMetCount < 3) return true
+  const actR = isMet(indicators, 'act_reading')
+  const actM = isMet(indicators, 'act_math')
+  if (actR !== actM) return true
 
   return false
 }
@@ -76,33 +80,50 @@ function hasAnyActivity(indicators: IndicatorInput[]): boolean {
 }
 
 /**
+ * Counts the number of distinct CCMR pathways a student has met.
+ *
+ * - Each standalone indicator that is met = 1 pathway.
+ * - SAT (both subscores met) = 1 pathway.
+ * - ACT (both subscores met) = 1 pathway.
+ *
+ * This is the correct value for students.indicators_met_count.
+ */
+export function countCCMRPathways(indicators: IndicatorInput[]): number {
+  let count = 0
+  for (const t of STANDALONE_INDICATORS) {
+    if (isMet(indicators, t)) count++
+  }
+  if (checkSatMet(indicators)) count++
+  if (checkActMet(indicators)) count++
+  return count
+}
+
+/**
  * Computes a student's CCMR readiness status from their indicator records.
- * This is pure business logic — no side effects, no Supabase dependency.
+ * Pure business logic — no side effects, no Supabase dependency.
  */
 export function computeCCMRReadiness(
   indicators: IndicatorInput[],
   gradeLevel: number
 ): CCMRReadiness {
-  // 1. Any full pathway met → 'met'
-  if (
-    checkReadingMathPaired(indicators) ||
-    checkCollegePrepPaired(indicators) ||
-    checkDualCreditPaired(indicators) ||
-    checkAnySingle(indicators)
-  ) {
-    return 'met'
-  }
+  // Any standalone indicator met → CCMR Met
+  if (STANDALONE_INDICATORS.some((t) => isMet(indicators, t))) return 'met'
+  // SAT College Ready (both subscores required)
+  if (checkSatMet(indicators)) return 'met'
+  // ACT College Ready (both subscores required)
+  if (checkActMet(indicators)) return 'met'
 
-  // 2–4 are senior-specific
+  // Senior-specific tiers
   if (gradeLevel === 12) {
+    // One SAT or ACT subscore met but not both → "almost" (one step away)
     if (checkAlmost(indicators)) return 'almost'
+    // Any in-progress work → "on_track"
     if (indicators.some((i) => i.status === 'in_progress')) return 'on_track'
     return 'at_risk'
   }
 
-  // 5. Grade 9–10 with no activity → 'too_early'
+  // Grade 9–10 with no activity whatsoever
   if (gradeLevel <= 10 && !hasAnyActivity(indicators)) return 'too_early'
 
-  // 6. Everything else (grade 11, or 9-10 with some data)
   return 'on_track'
 }

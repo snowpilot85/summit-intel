@@ -39,13 +39,23 @@ export type InterventionStatus =
   | 'dismissed'
 
 export type UploadSourceType =
+  // Active upload types
   | 'region_13_tracker'
   | 'tea_ccmr_tracker'
-  | 'sat_act_scores'
+  | 'sat_scores'
+  | 'act_scores'
   | 'tsia_results'
+  | 'peims_fall_snapshot'
+  | 'peims_summer_submission'
+  | 'trex_transcript'
+  | 'dual_credit_transcript'
+  // Legacy values — kept for backward compatibility with existing rows
+  | 'sat_act_scores'
   | 'cte_ibc_data'
   | 'dual_credit_transcripts'
   | 'custom_csv'
+
+export type AssessmentType = 'sat' | 'act' | 'tsia' | 'ap' | 'ib' | 'staar'
 
 export type UploadStatus = 'processing' | 'completed' | 'completed_with_errors' | 'failed'
 
@@ -229,10 +239,35 @@ export type IndicatorRow = {
   course_grade: string | null
   exam_date: string | null
   source_year: string | null
+  derivation_source: string | null   // e.g. 'sat', 'tsia', 'act', 'staar', 'tracker'
   notes: string | null
   created_at: string
   updated_at: string
 }
+
+export type StudentAssessmentRow = {
+  id: string
+  student_id: string
+  district_id: string
+  assessment_type: AssessmentType
+  assessment_date: string | null
+  raw_data: Record<string, unknown>
+  sat_ebrw: number | null
+  sat_math: number | null
+  sat_total: number | null
+  act_english: number | null
+  act_math: number | null
+  act_reading: number | null
+  act_composite: number | null
+  tsia_elar: number | null
+  tsia_math: number | null
+  tsia_essay: number | null
+  created_at: string
+  updated_at: string
+}
+
+export type StudentAssessmentInsert = Omit<StudentAssessmentRow, 'id' | 'created_at' | 'updated_at'> & { id?: string }
+export type StudentAssessmentUpdate = Partial<StudentAssessmentInsert>
 
 export type InterventionRow = {
   id: string

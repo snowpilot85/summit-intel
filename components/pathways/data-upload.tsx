@@ -9,12 +9,18 @@ import {
   Upload,
   FileSpreadsheet,
   FileText,
-  Lightbulb,
+  Clock,
   Loader2,
   X,
   ArrowRight,
 } from "lucide-react";
-import { importRows, type ParsedStudentRow, type ImportResult } from "@/app/pathways/data-upload/actions";
+import {
+  importRows,
+  importSatScores,
+  type ParsedStudentRow,
+  type ImportResult,
+  type SatImportResult,
+} from "@/app/pathways/data-upload/actions";
 import type { DataUploadRow, IndicatorType, UploadSourceType } from "@/types/database";
 
 /* ============================================
@@ -209,8 +215,15 @@ function sourceTypeLabel(st: UploadSourceType): string {
   const labels: Record<UploadSourceType, string> = {
     region_13_tracker: "Region 13 Tracker",
     tea_ccmr_tracker: "TEA CCMR Tracker",
-    sat_act_scores: "SAT/ACT Scores",
+    sat_scores: "SAT Scores",
+    act_scores: "ACT Scores",
     tsia_results: "TSIA Results",
+    peims_fall_snapshot: "PEIMS Fall Snapshot",
+    peims_summer_submission: "PEIMS Summer Submission",
+    trex_transcript: "TREx Transcript",
+    dual_credit_transcript: "Dual Credit",
+    // Legacy
+    sat_act_scores: "SAT/ACT Scores",
     cte_ibc_data: "CTE/IBC Data",
     dual_credit_transcripts: "Dual Credit",
     custom_csv: "Custom CSV",
@@ -355,53 +368,50 @@ function buildParsedRows(
 // DATA SOURCES STATUS TABLE
 // ============================================
 
-function getDataSources(hasCCMR: boolean): { name: string; sourceTypes: UploadSourceType[]; format: string }[] {
-  return [
-    {
-      name: hasCCMR ? "CCMR student roster" : "Student roster",
-      sourceTypes: ["region_13_tracker", "tea_ccmr_tracker"],
-      format: hasCCMR ? "Region 13 Excel / CSV" : "CSV",
-    },
-    { name: "SAT/ACT scores", sourceTypes: ["sat_act_scores"], format: "CSV from College Board / ACT" },
-    ...(hasCCMR ? [{ name: "TSIA results", sourceTypes: ["tsia_results"] as UploadSourceType[], format: "TEA file" }] : []),
-    { name: "CTE/IBC data", sourceTypes: ["cte_ibc_data"], format: "SIS export / CSV" },
-    { name: "Dual credit transcripts", sourceTypes: ["dual_credit_transcripts"], format: "CSV" },
-  ];
-}
+const PLANNED_INTEGRATIONS = [
+  "ACT score files",
+  "TSIA results (TEA direct export)",
+  "PEIMS exports (Fall Snapshot · Summer Submission)",
+  "TREx transcripts",
+  "Dual credit records (community college partners)",
+];
 
-const StatusBadge = ({ status }: { status: "current" | "partial" | "missing" }) => {
-  const cfg = {
-    current: { label: "Current", icon: CheckCircle2, cls: "bg-teal-100 text-teal-700" },
-    partial: { label: "Partial", icon: AlertCircle, cls: "bg-warning-light text-warning-dark" },
-    missing: { label: "Missing", icon: XCircle, cls: "bg-error-light text-error-dark" },
-  }[status];
-  const Icon = cfg.icon;
-  return (
-    <span className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 text-[12px] font-medium rounded-full", cfg.cls)}>
-      <Icon className="w-3.5 h-3.5" />
-      {cfg.label}
-    </span>
-  );
+type DataSourceRow = {
+  label: string;
+  format: string;
+  latest: DataUploadRow | null;
 };
 
 const DataSourcesTable = ({ uploads, hasCCMR }: { uploads: DataUploadRow[]; hasCCMR: boolean }) => {
-  const latestByType = new Map<UploadSourceType, DataUploadRow>();
-  for (const u of uploads) {
-    if (u.status === "completed" || u.status === "completed_with_errors") {
-      if (!latestByType.has(u.source_type)) {
-        latestByType.set(u.source_type, u);
-      }
-    }
-  }
+  const latestByTypes = (types: UploadSourceType[]): DataUploadRow | null =>
+    uploads
+      .filter((u) => (u.status === "completed" || u.status === "completed_with_errors") && types.includes(u.source_type))
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0] ?? null;
+
+  const sources: DataSourceRow[] = [
+    {
+      label: hasCCMR ? "CCMR student roster" : "Student roster",
+      format: hasCCMR ? "Region 13 Excel / CSV" : "CSV",
+      latest: latestByTypes(["region_13_tracker", "tea_ccmr_tracker"]),
+    },
+    {
+      label: "SAT scores (College Board ESR)",
+      format: "CSV",
+      latest: latestByTypes(["sat_scores"]),
+    },
+  ];
+
 
   return (
     <div className="bg-neutral-0 border border-neutral-200 rounded-lg overflow-hidden">
       <div className="px-6 py-4 border-b border-neutral-200">
         <h2 className="text-[17px] font-semibold text-neutral-900">Data sources</h2>
         <p className="text-[13px] text-neutral-500 mt-0.5">
-          Status of each data feed powering Summit Pathways
+          Active integrations powering Summit Pathways
         </p>
       </div>
+
+      {/* Active integrations */}
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead>
@@ -414,36 +424,58 @@ const DataSourcesTable = ({ uploads, hasCCMR }: { uploads: DataUploadRow[]; hasC
             </tr>
           </thead>
           <tbody>
-            {getDataSources(hasCCMR).map((source) => {
-              const latest = source.sourceTypes
-                .map((t) => latestByType.get(t))
-                .filter(Boolean)[0];
-              const age = latest ? daysSince(latest.created_at) : null;
-              const status: "current" | "partial" | "missing" =
-                !latest ? "missing" : age! <= 90 ? "current" : "partial";
-
-              return (
-                <tr key={source.name} className="border-b border-neutral-100 last:border-0">
-                  <td className="px-4 py-3 text-[13px] font-medium text-neutral-900">
-                    {source.name}
-                  </td>
-                  <td className="px-4 py-3">
-                    <StatusBadge status={status} />
-                  </td>
-                  <td className="px-4 py-3 text-[13px] text-neutral-700">
-                    {latest
-                      ? `${latest.records_imported.toLocaleString()} students`
-                      : <span className="text-neutral-400">—</span>}
-                  </td>
-                  <td className="px-4 py-3 text-[13px] text-neutral-700">
-                    {latest ? formatDate(latest.created_at) : <span className="text-neutral-400">Never</span>}
-                  </td>
-                  <td className="px-4 py-3 text-[13px] text-neutral-500">{source.format}</td>
-                </tr>
-              );
-            })}
+            {sources.map((source) => (
+              <tr key={source.label} className="border-b border-neutral-100 last:border-0">
+                <td className="px-4 py-3 text-[13px] font-medium text-neutral-900">{source.label}</td>
+                <td className="px-4 py-3">
+                  {source.latest ? (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[12px] font-medium rounded-full bg-teal-100 text-teal-700">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      Uploaded
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[12px] font-medium rounded-full bg-neutral-100 text-neutral-500">
+                      <Upload className="w-3.5 h-3.5" />
+                      Not uploaded
+                    </span>
+                  )}
+                </td>
+                <td className="px-4 py-3 text-[13px] text-neutral-700">
+                  {source.latest
+                    ? `${source.latest.records_imported.toLocaleString()} students`
+                    : <span className="text-neutral-400">—</span>}
+                </td>
+                <td className="px-4 py-3 text-[13px] text-neutral-700">
+                  {source.latest
+                    ? formatDate(source.latest.created_at)
+                    : <span className="text-neutral-400">Never</span>}
+                </td>
+                <td className="px-4 py-3 text-[13px] text-neutral-500">{source.format}</td>
+              </tr>
+            ))}
           </tbody>
         </table>
+      </div>
+
+      {/* Planned integrations */}
+      <div className="px-6 py-4 border-t border-neutral-100 bg-neutral-50">
+        <div className="flex items-center gap-2 mb-3">
+          <Clock className="w-3.5 h-3.5 text-neutral-400" />
+          <span className="text-[12px] font-semibold text-neutral-500 uppercase tracking-wide">
+            Planned integrations
+          </span>
+        </div>
+        <ul className="space-y-1.5">
+          {PLANNED_INTEGRATIONS.map((item) => (
+            <li key={item} className="flex items-center gap-2 text-[13px] text-neutral-400">
+              <span className="w-1 h-1 rounded-full bg-neutral-300 flex-shrink-0" />
+              {item}
+            </li>
+          ))}
+        </ul>
+        <p className="text-[12px] text-neutral-400 mt-3">
+          These integrations are on the roadmap and will be supported in an upcoming release.
+        </p>
       </div>
     </div>
   );
@@ -453,32 +485,39 @@ const DataSourcesTable = ({ uploads, hasCCMR }: { uploads: DataUploadRow[]; hasC
 // UPLOAD ZONE
 // ============================================
 
+export type UploadFormat = "tracker" | "sat";
+
 interface UploadZoneProps {
   onFile: (file: File) => void;
   isProcessing: boolean;
   hasCCMR: boolean;
+  uploadFormat: UploadFormat;
 }
 
-const UploadZone = ({ onFile, isProcessing, hasCCMR }: UploadZoneProps) => {
+const UploadZone = ({ onFile, isProcessing, hasCCMR, uploadFormat }: UploadZoneProps) => {
   const [isDragOver, setIsDragOver] = React.useState(false);
   const inputRef = React.useRef<HTMLInputElement>(null);
+  const isSat = uploadFormat === "sat";
 
   const handleFiles = (files: FileList | null) => {
     const file = files?.[0];
     if (file) onFile(file);
   };
 
-  const quickCards: { label: string; sub: string; icon: React.ElementType; color: string }[] = [
-    ...(hasCCMR ? [
-      { label: "Region 13 CCMR Tracker", sub: "Auto-detect class year tabs and indicator columns", icon: FileSpreadsheet, color: "text-teal-600" },
-      { label: "TEA CCMR Tracker", sub: "Official TEA Part I or Part II tracker file", icon: FileText, color: "text-primary-500" },
-    ] : []),
-    { label: "SAT/ACT scores", sub: "College Board or ACT CSV export", icon: FileSpreadsheet, color: "text-neutral-500" },
-    { label: "CTE/IBC data", sub: "CTE enrollment and certification records", icon: FileText, color: "text-neutral-500" },
-  ];
-
   return (
-    <div className="bg-neutral-0 border border-neutral-200 rounded-lg p-6 space-y-6">
+    <div className="bg-neutral-0 border border-neutral-200 rounded-lg p-6 space-y-4">
+      {/* SAT helper note */}
+      {isSat && (
+        <div className="flex items-start gap-2.5 px-4 py-3 bg-primary-50 border border-primary-200 rounded-lg">
+          <FileSpreadsheet className="w-4 h-4 text-primary-600 flex-shrink-0 mt-0.5" />
+          <p className="text-[13px] text-primary-800">
+            Upload the <strong>Educator Score Report (ESR)</strong> file from College Board.
+            File format: <strong>.csv</strong>. Students are matched by State Student ID (TSDS).
+            Only the LATEST_* score columns are used; the full row is stored for future reference.
+          </p>
+        </div>
+      )}
+
       {/* Drop zone */}
       <div
         onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
@@ -500,7 +539,7 @@ const UploadZone = ({ onFile, isProcessing, hasCCMR }: UploadZoneProps) => {
         <input
           ref={inputRef}
           type="file"
-          accept=".xlsx,.xls,.csv,.tsv"
+          accept={isSat ? ".csv" : ".xlsx,.xls,.csv,.tsv"}
           className="hidden"
           onChange={(e) => handleFiles(e.target.files)}
         />
@@ -510,32 +549,15 @@ const UploadZone = ({ onFile, isProcessing, hasCCMR }: UploadZoneProps) => {
           <Upload className="w-10 h-10 text-neutral-400 mx-auto mb-4" />
         )}
         <p className="text-[15px] font-medium text-neutral-900 mb-1">
-          {isProcessing ? "Reading file…" : "Drop your file here, or click to browse"}
+          {isProcessing ? "Processing…" : "Drop your file here, or click to browse"}
         </p>
         <p className="text-[13px] text-neutral-500">
-          {hasCCMR ? "Supported: .xlsx (Region 13 CCMR Tracker), .csv, .tsv" : "Supported: .xlsx, .csv, .tsv"}
+          {isSat
+            ? "Supported: .csv (College Board ESR format)"
+            : hasCCMR
+            ? "Supported: .xlsx (Region 13 CCMR Tracker), .csv, .tsv"
+            : "Supported: .xlsx, .csv, .tsv"}
         </p>
-      </div>
-
-      {/* Quick-upload shortcut cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {quickCards.map((card) => {
-          const Icon = card.icon;
-          return (
-            <button
-              key={card.label}
-              onClick={() => inputRef.current?.click()}
-              disabled={isProcessing}
-              className="flex items-start gap-3 p-4 bg-neutral-50 rounded-lg hover:bg-neutral-100 transition-colors text-left disabled:opacity-50"
-            >
-              <Icon className={cn("w-5 h-5 mt-0.5 flex-shrink-0", card.color)} />
-              <div>
-                <p className="text-[13px] font-medium text-neutral-900">{card.label}</p>
-                <p className="text-[12px] text-neutral-500 mt-0.5">{card.sub}</p>
-              </div>
-            </button>
-          );
-        })}
       </div>
     </div>
   );
@@ -779,6 +801,74 @@ const ImportResultBanner = ({
 };
 
 // ============================================
+// SAT IMPORT RESULT BANNER
+// ============================================
+
+const SatImportResultBanner = ({
+  result,
+  onDismiss,
+}: {
+  result: SatImportResult;
+  onDismiss: () => void;
+}) => {
+  const hasErrors = result.errors.length > 0 || result.unmatched > 0;
+  return (
+    <div
+      className={cn(
+        "border rounded-lg p-5",
+        hasErrors
+          ? "bg-warning-light border-warning/30"
+          : "bg-teal-50 border-teal-200"
+      )}
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-start gap-3">
+          {hasErrors ? (
+            <AlertCircle className="w-5 h-5 text-warning-dark flex-shrink-0 mt-0.5" />
+          ) : (
+            <CheckCircle2 className="w-5 h-5 text-teal-600 flex-shrink-0 mt-0.5" />
+          )}
+          <div>
+            <p className={cn("text-[14px] font-semibold", hasErrors ? "text-warning-dark" : "text-teal-800")}>
+              {hasErrors ? "SAT import completed with warnings" : "SAT scores imported"}
+            </p>
+            <p className={cn("text-[13px] mt-1", hasErrors ? "text-warning-dark/80" : "text-teal-700")}>
+              Matched {result.matched} of {result.matched + result.unmatched} students
+              {result.inserted > 0 && ` · ${result.inserted} new SAT records`}
+              {result.updated > 0 && ` · ${result.updated} updated`}
+              {result.unmatched > 0 && ` · ${result.unmatched} unmatched`}
+            </p>
+            {result.unmatchedIds.length > 0 && (
+              <div className="mt-2">
+                <p className="text-[12px] text-warning-dark/70 font-medium mb-0.5">
+                  Unmatched TSDS IDs:
+                </p>
+                <p className="text-[12px] text-warning-dark/70 font-mono break-all">
+                  {result.unmatchedIds.slice(0, 20).join(", ")}
+                  {result.unmatchedIds.length > 20 && ` … and ${result.unmatchedIds.length - 20} more`}
+                </p>
+              </div>
+            )}
+            {result.errors.length > 0 && (
+              <ul className="mt-2 space-y-0.5">
+                {result.errors.slice(0, 5).map((e, i) => (
+                  <li key={i} className="text-[12px] text-warning-dark/70">
+                    {e}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+        <button onClick={onDismiss} className="flex-shrink-0">
+          <X className="w-4 h-4 text-neutral-400 hover:text-neutral-600" />
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// ============================================
 // UPLOAD HISTORY TABLE
 // ============================================
 
@@ -868,53 +958,26 @@ const UploadHistoryTable = ({ uploads }: { uploads: DataUploadRow[] }) => {
 // WHAT'S MISSING CARD
 // ============================================
 
-const MISSING_GUIDANCE: {
-  sourceType: UploadSourceType;
-  label: string;
-  unlocks: string;
-}[] = [
-  { sourceType: "cte_ibc_data", label: "CTE enrollment with certification alignment", unlocks: "Enables IBC exam scheduling recommendations" },
-  { sourceType: "tsia_results", label: "TSIA results", unlocks: "Identifies students near the college-readiness threshold" },
-  { sourceType: "sat_act_scores", label: "SAT/ACT score details (not just met/not met)", unlocks: 'Enables "close to threshold" identification for targeted prep' },
-  { sourceType: "dual_credit_transcripts", label: "Dual credit grade data", unlocks: "Enables at-risk-of-failing alerts for college prep courses" },
-];
-
 const WhatsMissingCard = ({ uploads, hasCCMR }: { uploads: DataUploadRow[]; hasCCMR: boolean }) => {
-  const uploadedTypes = new Set(
-    uploads.filter((u) => u.status === "completed" || u.status === "completed_with_errors")
-      .map((u) => u.source_type)
+  const rosterTypes: UploadSourceType[] = ["region_13_tracker", "tea_ccmr_tracker"];
+  const hasRoster = uploads.some(
+    (u) =>
+      (u.status === "completed" || u.status === "completed_with_errors") &&
+      rosterTypes.includes(u.source_type)
   );
-  const guidance = hasCCMR ? MISSING_GUIDANCE : MISSING_GUIDANCE.filter((g) => g.sourceType !== "tsia_results");
-  const missing = guidance.filter((g) => !uploadedTypes.has(g.sourceType));
 
-  if (missing.length === 0) return null;
+  if (hasRoster) return null;
 
   return (
-    <div className="bg-neutral-0 border border-neutral-200 rounded-lg p-6">
-      <div className="flex items-start gap-3 mb-4">
-        <Lightbulb className="w-5 h-5 text-warning-dark flex-shrink-0 mt-0.5" />
-        <div>
-          <h2 className="text-[16px] font-semibold text-neutral-900">
-            What&apos;s missing
-          </h2>
-          <p className="text-[13px] text-neutral-600 mt-0.5">
-            Upload these data sources to unlock additional features:
-          </p>
-        </div>
-      </div>
-      <div className="space-y-2.5 ml-8">
-        {missing.map((item) => (
-          <div
-            key={item.sourceType}
-            className="flex items-start gap-3 p-3 bg-warning-light/40 rounded-lg"
-          >
-            <span className="w-2 h-2 mt-1.5 bg-warning-dark rounded-full flex-shrink-0" />
-            <div>
-              <p className="text-[13px] font-medium text-neutral-900">{item.label}</p>
-              <p className="text-[12px] text-neutral-600 mt-0.5">{item.unlocks}</p>
-            </div>
-          </div>
-        ))}
+    <div className="bg-neutral-0 border border-neutral-200 rounded-lg p-5 flex items-start gap-3">
+      <Upload className="w-4 h-4 text-neutral-400 flex-shrink-0 mt-0.5" />
+      <div>
+        <p className="text-[13px] font-medium text-neutral-900">
+          {hasCCMR ? "No CCMR roster uploaded yet" : "No student roster uploaded yet"}
+        </p>
+        <p className="text-[12px] text-neutral-500 mt-0.5">
+          Upload your {hasCCMR ? "CCMR tracker file" : "student roster"} above to populate student records, pathway data, and readiness indicators.
+        </p>
       </div>
     </div>
   );
@@ -935,6 +998,7 @@ export const DataUploadPage = ({
   hasCCMR,
 }: DataUploadPageProps) => {
   const [uploads, setUploads] = React.useState<DataUploadRow[]>(initialUploads);
+  const [uploadFormat, setUploadFormat] = React.useState<UploadFormat>("tracker");
   const [detected, setDetected] = React.useState<DetectedFile | null>(null);
   const [columnOverrides, setColumnOverrides] = React.useState<
     Record<string, MappedFieldValue>
@@ -942,25 +1006,63 @@ export const DataUploadPage = ({
   const [isParsing, setIsParsing] = React.useState(false);
   const [isImporting, setIsImporting] = React.useState(false);
   const [importResult, setImportResult] = React.useState<ImportResult | null>(null);
+  const [satResult, setSatResult] = React.useState<SatImportResult | null>(null);
   const [parseError, setParseError] = React.useState<string | null>(null);
+
+  const handleFormatChange = React.useCallback((fmt: UploadFormat) => {
+    setUploadFormat(fmt);
+    setDetected(null);
+    setColumnOverrides({});
+    setImportResult(null);
+    setSatResult(null);
+    setParseError(null);
+  }, []);
 
   const handleFile = React.useCallback(async (file: File) => {
     setParseError(null);
     setDetected(null);
     setColumnOverrides({});
     setImportResult(null);
+    setSatResult(null);
     setIsParsing(true);
 
     try {
-      let result: DetectedFile;
-      if (file.name.endsWith(".csv") || file.name.endsWith(".tsv")) {
+      if (uploadFormat === "sat") {
         const text = await file.text();
-        result = await parseCsv(text, file.name);
+        const result = await importSatScores(text, file.name);
+        setSatResult(result);
+        // Add placeholder row to upload history
+        setUploads((prev) => [
+          {
+            id: result.uploadId,
+            district_id: "",
+            school_year_id: null,
+            file_name: file.name,
+            source_type: "sat_scores",
+            status: result.errors.length > 0 ? "completed_with_errors" : "completed",
+            records_total: result.matched + result.unmatched,
+            records_imported: result.matched,
+            records_skipped: result.unmatched,
+            records_errored: result.errors.length,
+            column_mapping: {},
+            error_log: null,
+            uploaded_by: null,
+            created_at: new Date().toISOString(),
+            completed_at: new Date().toISOString(),
+          },
+          ...prev,
+        ]);
       } else {
-        const buffer = await file.arrayBuffer();
-        result = await parseXlsx(buffer, file.name);
+        let result: DetectedFile;
+        if (file.name.endsWith(".csv") || file.name.endsWith(".tsv")) {
+          const text = await file.text();
+          result = await parseCsv(text, file.name);
+        } else {
+          const buffer = await file.arrayBuffer();
+          result = await parseXlsx(buffer, file.name);
+        }
+        setDetected(result);
       }
-      setDetected(result);
     } catch (err) {
       setParseError(
         err instanceof Error ? err.message : "Failed to read file. Make sure it's a valid Excel or CSV file."
@@ -968,7 +1070,7 @@ export const DataUploadPage = ({
     } finally {
       setIsParsing(false);
     }
-  }, []);
+  }, [uploadFormat]);
 
   const handleImport = React.useCallback(async () => {
     if (!detected) return;
@@ -1033,11 +1135,17 @@ export const DataUploadPage = ({
         </p>
       </div>
 
-      {/* Import result banner */}
+      {/* Import result banners */}
       {importResult && (
         <ImportResultBanner
           result={importResult}
           onDismiss={() => setImportResult(null)}
+        />
+      )}
+      {satResult && (
+        <SatImportResultBanner
+          result={satResult}
+          onDismiss={() => setSatResult(null)}
         />
       )}
 
@@ -1058,9 +1166,54 @@ export const DataUploadPage = ({
       {/* Data sources status */}
       <DataSourcesTable uploads={uploads} hasCCMR={hasCCMR} />
 
-      {/* Upload zone — hidden while column mapper is shown */}
+      {/* Format selector + upload zone — hidden while column mapper is shown */}
       {!detected && (
-        <UploadZone onFile={handleFile} isProcessing={isParsing} hasCCMR={hasCCMR} />
+        <>
+          {/* Format selector */}
+          <div className="bg-neutral-0 border border-neutral-200 rounded-lg px-6 py-4">
+            <label className="block text-[13px] font-semibold text-neutral-700 mb-2">
+              What are you uploading?
+            </label>
+            <div className="flex gap-3">
+              <button
+                onClick={() => handleFormatChange("tracker")}
+                className={cn(
+                  "flex-1 flex items-center gap-3 px-4 py-3 rounded-lg border-2 text-left transition-colors",
+                  uploadFormat === "tracker"
+                    ? "border-teal-500 bg-teal-50"
+                    : "border-neutral-200 hover:border-neutral-300 hover:bg-neutral-50"
+                )}
+              >
+                <FileSpreadsheet className={cn("w-5 h-5 flex-shrink-0", uploadFormat === "tracker" ? "text-teal-600" : "text-neutral-400")} />
+                <div>
+                  <p className={cn("text-[13px] font-semibold", uploadFormat === "tracker" ? "text-teal-800" : "text-neutral-700")}>
+                    Region 13 CCMR Tracker
+                  </p>
+                  <p className="text-[12px] text-neutral-500">Excel or CSV · Quick Start</p>
+                </div>
+              </button>
+              <button
+                onClick={() => handleFormatChange("sat")}
+                className={cn(
+                  "flex-1 flex items-center gap-3 px-4 py-3 rounded-lg border-2 text-left transition-colors",
+                  uploadFormat === "sat"
+                    ? "border-teal-500 bg-teal-50"
+                    : "border-neutral-200 hover:border-neutral-300 hover:bg-neutral-50"
+                )}
+              >
+                <FileText className={cn("w-5 h-5 flex-shrink-0", uploadFormat === "sat" ? "text-teal-600" : "text-neutral-400")} />
+                <div>
+                  <p className={cn("text-[13px] font-semibold", uploadFormat === "sat" ? "text-teal-800" : "text-neutral-700")}>
+                    SAT Score File
+                  </p>
+                  <p className="text-[12px] text-neutral-500">College Board ESR · CSV</p>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          <UploadZone onFile={handleFile} isProcessing={isParsing} hasCCMR={hasCCMR} uploadFormat={uploadFormat} />
+        </>
       )}
 
       {/* Column mapper */}

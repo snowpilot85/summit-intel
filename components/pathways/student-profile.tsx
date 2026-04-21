@@ -19,7 +19,19 @@ import {
   Award,
   Layers,
   Building2,
+  ExternalLink,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  getRuleForIndicatorType,
+  buildStudentEvaluation,
+  type CCMRRule,
+} from "@/lib/ccmr-rules";
 import type {
   CCMRReadiness,
   IndicatorRow,
@@ -62,36 +74,93 @@ const INDICATOR_LABELS: Record<IndicatorType, string> = {
   sped_advanced_degree: "SpEd Advanced Degree",
 };
 
-const INDICATOR_CATEGORIES: { label: string; icon: React.ElementType; types: IndicatorType[] }[] = [
+// A display item is either a single DB indicator row or a combined row
+// (SAT / ACT) whose status is derived from two subscores.
+type IndicatorDisplayItem =
+  | { kind: "single"; type: IndicatorType }
+  | {
+      kind: "combined";
+      label: string;
+      /** The two sub-indicator types that must BOTH be met */
+      types: [IndicatorType, IndicatorType];
+      /** Which type to use for the rule-modal lookup */
+      clickType: IndicatorType;
+      /** Human-readable labels for each subscore */
+      subLabels: [string, string];
+    };
+
+const INDICATOR_CATEGORIES: {
+  label: string;
+  icon: React.ElementType;
+  items: IndicatorDisplayItem[];
+}[] = [
   {
     label: "College Readiness",
     icon: BookOpen,
-    types: ["tsi_reading", "tsi_math", "sat_reading", "sat_math", "act_reading", "act_math"],
+    items: [
+      { kind: "single", type: "tsi_reading" },
+      { kind: "single", type: "tsi_math" },
+      // SAT is ONE combined indicator — requires BOTH subscores
+      {
+        kind: "combined",
+        label: "SAT College Ready",
+        types: ["sat_reading", "sat_math"],
+        clickType: "sat_reading",
+        subLabels: ["EBRW (≥ 480)", "Math (≥ 530)"],
+      },
+      // ACT is ONE combined indicator — requires BOTH subscores
+      {
+        kind: "combined",
+        label: "ACT College Ready",
+        types: ["act_reading", "act_math"],
+        clickType: "act_reading",
+        subLabels: ["English (≥ 19)", "Math (≥ 19)"],
+      },
+    ],
   },
   {
     label: "College Prep Courses",
     icon: GraduationCap,
-    types: ["college_prep_ela", "college_prep_math"],
+    items: [
+      { kind: "single", type: "college_prep_ela" },
+      { kind: "single", type: "college_prep_math" },
+    ],
   },
   {
     label: "Dual Credit",
     icon: Award,
-    types: ["dual_credit_ela", "dual_credit_math", "dual_credit_any"],
+    items: [
+      { kind: "single", type: "dual_credit_ela" },
+      { kind: "single", type: "dual_credit_math" },
+      { kind: "single", type: "dual_credit_any" },
+    ],
   },
   {
     label: "AP / IB",
     icon: Award,
-    types: ["ap_exam", "ib_exam"],
+    items: [
+      { kind: "single", type: "ap_exam" },
+      { kind: "single", type: "ib_exam" },
+    ],
   },
   {
     label: "Career",
     icon: Briefcase,
-    types: ["ibc", "associate_degree", "level_i_ii_certificate"],
+    items: [
+      { kind: "single", type: "ibc" },
+      { kind: "single", type: "associate_degree" },
+      { kind: "single", type: "level_i_ii_certificate" },
+    ],
   },
   {
     label: "Other",
     icon: User,
-    types: ["onramps", "military_enlistment", "iep_completion", "sped_advanced_degree"],
+    items: [
+      { kind: "single", type: "onramps" },
+      { kind: "single", type: "military_enlistment" },
+      { kind: "single", type: "iep_completion" },
+      { kind: "single", type: "sped_advanced_degree" },
+    ],
   },
 ];
 
@@ -277,6 +346,14 @@ const StudentHeader = ({ student, campusName, graduationDate, hasCCMR, pathway }
                 <p className="text-[12px] text-neutral-500">
                   {student.indicators_met_count} indicator{student.indicators_met_count !== 1 ? "s" : ""} met
                 </p>
+                <Link
+                  href="/pathways/ccmr-rules"
+                  target="_blank"
+                  className="inline-flex items-center gap-1 text-[11px] text-neutral-400 hover:text-primary-600 transition-colors"
+                >
+                  How CCMR is calculated
+                  <ExternalLink className="w-3 h-3" />
+                </Link>
               </>
             ) : (
               <>
@@ -319,17 +396,157 @@ function buildIndicatorDetail(row: IndicatorRow): string {
   return parts.join(" · ") || "—";
 }
 
+// ─────────────────────────────────────────────
+// INDICATOR DETAIL MODAL
+// ─────────────────────────────────────────────
+
+const IndicatorDetailModal = ({
+  rule,
+  byType,
+  onClose,
+}: {
+  rule: CCMRRule;
+  byType: Map<IndicatorType, IndicatorRow>;
+  onClose: () => void;
+}) => {
+  const evalLines = buildStudentEvaluation(rule, byType);
+  const hasAnyData = evalLines.some((l) => l.value !== null || l.met !== null);
+  // SAT and ACT require ALL subscores; other multi-type rules require ANY
+  const requiresAll = rule.id === "sat" || rule.id === "act";
+  const isMet = requiresAll
+    ? rule.indicatorTypes.every((t) => byType.get(t)?.status === "met")
+    : rule.indicatorTypes.some((t) => byType.get(t)?.status === "met");
+  const isPartial =
+    !isMet &&
+    requiresAll &&
+    rule.indicatorTypes.some((t) => byType.get(t)?.status === "met");
+
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="text-[16px]">{rule.name}</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          {/* Rule details */}
+          <div className="space-y-3">
+            <div>
+              <p className="text-[11px] font-semibold text-neutral-400 uppercase tracking-wide mb-1">
+                What qualifies
+              </p>
+              <p className="text-[13px] text-neutral-700">{rule.qualifies}</p>
+            </div>
+            <div className="flex flex-wrap gap-4">
+              <div>
+                <p className="text-[11px] font-semibold text-neutral-400 uppercase tracking-wide mb-1">
+                  Data source
+                </p>
+                <p className="text-[12px] text-neutral-600">{rule.dataSource}</p>
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold text-neutral-400 uppercase tracking-wide mb-1">
+                  TEA citation
+                </p>
+                <p className="text-[12px] text-neutral-500 font-mono">{rule.citation}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Divider */}
+          <div className="border-t border-neutral-100" />
+
+          {/* Student evaluation */}
+          <div>
+            <p className="text-[11px] font-semibold text-neutral-400 uppercase tracking-wide mb-2">
+              This student
+            </p>
+            {!hasAnyData ? (
+              <p className="text-[13px] text-neutral-500 italic">
+                No data provided from {rule.dataSource.split(" (")[0].toLowerCase()}.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {evalLines.map((line, i) => (
+                  <div key={i} className="flex items-center gap-3 text-[13px]">
+                    <span className="text-neutral-600 w-[120px] flex-shrink-0">{line.label}</span>
+                    {line.value !== null ? (
+                      <>
+                        <span className="font-semibold text-neutral-900">{line.value}</span>
+                        {line.threshold && (
+                          <span className="text-neutral-400">
+                            (threshold: {line.threshold})
+                          </span>
+                        )}
+                        {line.met !== null && (
+                          <span
+                            className={cn(
+                              "ml-auto font-medium",
+                              line.met ? "text-teal-700" : "text-error-dark"
+                            )}
+                          >
+                            {line.met ? "✓ Met" : "✗ Not met"}
+                          </span>
+                        )}
+                      </>
+                    ) : (
+                      <span className="text-neutral-400 italic">No data</span>
+                    )}
+                  </div>
+                ))}
+                <div className={cn(
+                  "mt-3 px-3 py-2 rounded-lg text-[13px] font-medium",
+                  isMet
+                    ? "bg-teal-50 text-teal-800"
+                    : isPartial
+                    ? "bg-warning-light text-warning-dark"
+                    : "bg-neutral-50 text-neutral-600"
+                )}>
+                  {isMet
+                    ? "✓ Indicator met — counts toward CCMR"
+                    : isPartial
+                    ? "⟳ In progress — both subscores required to satisfy this indicator"
+                    : "✗ Indicator not yet met"}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Rules page link */}
+          <Link
+            href="/pathways/ccmr-rules"
+            target="_blank"
+            className="inline-flex items-center gap-1.5 text-[12px] text-neutral-400 hover:text-primary-600 transition-colors"
+          >
+            View all CCMR rules
+            <ExternalLink className="w-3 h-3" />
+          </Link>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+// ─────────────────────────────────────────────
+// CCMR INDICATOR GRID (with clickable rows)
+// ─────────────────────────────────────────────
+
 const CCMRIndicatorGrid = ({ indicators }: { indicators: IndicatorRow[] }) => {
   const byType = new Map<IndicatorType, IndicatorRow>(
     indicators.map((r) => [r.indicator_type, r])
   );
+  const [selectedType, setSelectedType] = React.useState<IndicatorType | null>(null);
+  const selectedRule = selectedType ? getRuleForIndicatorType(selectedType) : null;
 
   return (
     <div className="bg-neutral-0 border border-neutral-200 rounded-lg p-6">
-      <h2 className="text-[18px] font-semibold text-neutral-900 mb-5">CCMR indicators</h2>
+      <div className="flex items-center justify-between mb-5">
+        <h2 className="text-[18px] font-semibold text-neutral-900">CCMR indicators</h2>
+        <span className="text-[12px] text-neutral-400">Click any row to see rules</span>
+      </div>
 
       <div className="space-y-6">
-        {INDICATOR_CATEGORIES.map(({ label, icon: Icon, types }) => (
+        {INDICATOR_CATEGORIES.map(({ label, icon: Icon, items }) => (
           <div key={label}>
             <div className="flex items-center gap-2 mb-3">
               <Icon className="w-4 h-4 text-neutral-400" />
@@ -340,43 +557,105 @@ const CCMRIndicatorGrid = ({ indicators }: { indicators: IndicatorRow[] }) => {
             <div className="border border-neutral-200 rounded-lg overflow-hidden">
               <table className="w-full">
                 <tbody>
-                  {types.map((type, idx) => {
-                    const row = byType.get(type);
-                    const status = row?.status ?? "not_attempted";
-                    const detail = row ? buildIndicatorDetail(row) : "—";
+                  {items.map((item, idx) => {
+                    if (item.kind === "single") {
+                      const row = byType.get(item.type);
+                      const status = row?.status ?? "not_attempted";
+                      const detail = row ? buildIndicatorDetail(row) : "—";
+                      return (
+                        <tr
+                          key={item.type}
+                          onClick={() => setSelectedType(item.type)}
+                          className={cn(
+                            "border-b border-neutral-100 last:border-0 cursor-pointer transition-colors",
+                            status === "met" && "bg-teal-50/40 hover:bg-teal-50/70",
+                            status === "in_progress" && "bg-warning-light/20 hover:bg-warning-light/40",
+                            (status === "not_attempted" || status === "not_met") && idx % 2 === 1
+                              ? "bg-neutral-50/50 hover:bg-neutral-100/60"
+                              : (status === "not_attempted" || status === "not_met") ? "hover:bg-neutral-50" : ""
+                          )}
+                        >
+                          <td className="px-4 py-3 text-[13px] text-neutral-900 w-[200px]">
+                            {INDICATOR_LABELS[item.type]}
+                          </td>
+                          <td className="px-4 py-3 w-[130px]">
+                            <div className="flex items-center gap-2">
+                              <IndicatorIcon status={status} />
+                              <span className={cn("text-[12px] font-medium", INDICATOR_STATUS_COLOR[status] ?? "text-neutral-400")}>
+                                {INDICATOR_STATUS_LABEL[status] ?? status}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-[12px] text-neutral-500">
+                            {detail === "—" ? <span className="text-neutral-300">—</span> : detail}
+                          </td>
+                          <td className="px-3 py-3 w-8 text-neutral-300">
+                            <ChevronRight className="w-3.5 h-3.5" />
+                          </td>
+                        </tr>
+                      );
+                    }
+
+                    // Combined row (SAT / ACT): both subscores must be met
+                    const [typeA, typeB] = item.types;
+                    const rowA = byType.get(typeA);
+                    const rowB = byType.get(typeB);
+                    const aIsMet = rowA?.status === "met";
+                    const bIsMet = rowB?.status === "met";
+                    const combinedStatus: IndicatorRow["status"] | "not_attempted" =
+                      aIsMet && bIsMet ? "met"
+                      : aIsMet || bIsMet ? "in_progress"
+                      : "not_attempted";
+
+                    // Detail line: show scores when available
+                    const detailParts: string[] = [];
+                    if (rowA?.score != null) detailParts.push(`${item.subLabels[0]}: ${rowA.score}`);
+                    else if (aIsMet) detailParts.push(`${item.subLabels[0]}: met`);
+                    if (rowB?.score != null) detailParts.push(`${item.subLabels[1]}: ${rowB.score}`);
+                    else if (bIsMet) detailParts.push(`${item.subLabels[1]}: met`);
+                    const combinedDetail = detailParts.length > 0 ? detailParts.join(" · ") : "—";
+
+                    // "In progress" annotation when only one subscore is met
+                    const missingLabel = aIsMet && !bIsMet
+                      ? item.subLabels[1]
+                      : !aIsMet && bIsMet
+                      ? item.subLabels[0]
+                      : null;
 
                     return (
                       <tr
-                        key={type}
+                        key={item.clickType}
+                        onClick={() => setSelectedType(item.clickType)}
                         className={cn(
-                          "border-b border-neutral-100 last:border-0",
-                          status === "met" && "bg-teal-50/40",
-                          status === "in_progress" && "bg-warning-light/20",
-                          idx % 2 === 1 && status === "not_attempted" && "bg-neutral-50/50"
+                          "border-b border-neutral-100 last:border-0 cursor-pointer transition-colors",
+                          combinedStatus === "met" && "bg-teal-50/40 hover:bg-teal-50/70",
+                          combinedStatus === "in_progress" && "bg-warning-light/20 hover:bg-warning-light/40",
+                          combinedStatus === "not_attempted" && idx % 2 === 1
+                            ? "bg-neutral-50/50 hover:bg-neutral-100/60"
+                            : combinedStatus === "not_attempted" ? "hover:bg-neutral-50" : ""
                         )}
                       >
                         <td className="px-4 py-3 text-[13px] text-neutral-900 w-[200px]">
-                          {INDICATOR_LABELS[type]}
+                          {item.label}
+                          {combinedStatus === "in_progress" && missingLabel && (
+                            <span className="block text-[11px] text-warning-dark mt-0.5">
+                              {missingLabel} needed
+                            </span>
+                          )}
                         </td>
                         <td className="px-4 py-3 w-[130px]">
                           <div className="flex items-center gap-2">
-                            <IndicatorIcon status={status} />
-                            <span
-                              className={cn(
-                                "text-[12px] font-medium",
-                                INDICATOR_STATUS_COLOR[status] ?? "text-neutral-400"
-                              )}
-                            >
-                              {INDICATOR_STATUS_LABEL[status] ?? status}
+                            <IndicatorIcon status={combinedStatus} />
+                            <span className={cn("text-[12px] font-medium", INDICATOR_STATUS_COLOR[combinedStatus] ?? "text-neutral-400")}>
+                              {INDICATOR_STATUS_LABEL[combinedStatus] ?? combinedStatus}
                             </span>
                           </div>
                         </td>
                         <td className="px-4 py-3 text-[12px] text-neutral-500">
-                          {detail === "—" ? (
-                            <span className="text-neutral-300">—</span>
-                          ) : (
-                            detail
-                          )}
+                          {combinedDetail === "—" ? <span className="text-neutral-300">—</span> : combinedDetail}
+                        </td>
+                        <td className="px-3 py-3 w-8 text-neutral-300">
+                          <ChevronRight className="w-3.5 h-3.5" />
                         </td>
                       </tr>
                     );
@@ -387,6 +666,15 @@ const CCMRIndicatorGrid = ({ indicators }: { indicators: IndicatorRow[] }) => {
           </div>
         ))}
       </div>
+
+      {/* Indicator detail modal */}
+      {selectedRule && (
+        <IndicatorDetailModal
+          rule={selectedRule}
+          byType={byType}
+          onClose={() => setSelectedType(null)}
+        />
+      )}
     </div>
   );
 };

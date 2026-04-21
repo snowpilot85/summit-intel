@@ -124,6 +124,7 @@ function Step1({
   const [name, setName] = React.useState("");
   const [teaId, setTeaId] = React.useState("");
   const [escRegion, setEscRegion] = React.useState("");
+  const [stateCode, setStateCode] = React.useState("TX");
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState("");
 
@@ -133,7 +134,7 @@ function Step1({
     setLoading(true);
     setError("");
     try {
-      const district = await createDistrict({ name, teaDistrictId: teaId, escRegion });
+      const district = await createDistrict({ name, teaDistrictId: teaId, escRegion, stateCode });
       onDone(district);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -153,6 +154,16 @@ function Step1({
           className={inputCls}
           placeholder="Edinburg CISD"
         />
+      </Field>
+      <Field label="State">
+        <select
+          value={stateCode}
+          onChange={(e) => setStateCode(e.target.value)}
+          className={inputCls}
+        >
+          <option value="TX">Texas (TX)</option>
+          <option value="CT">Connecticut (CT)</option>
+        </select>
       </Field>
       <Field label="TEA district ID" hint="Optional — 6-digit TEA ID number">
         <input

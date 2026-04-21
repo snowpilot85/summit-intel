@@ -25,6 +25,7 @@ import {
   ArrowLeftRight,
   BarChart3,
   Compass,
+  BookOpen,
 } from "lucide-react";
 import { clearDistrict } from "@/app/pathways/actions";
 
@@ -258,14 +259,15 @@ const pathwaysNavItems = [
   { id: "interventions", label: "Interventions", icon: Target, href: "/pathways/interventions" },
   { id: "clusters", label: "Cluster Explorer", icon: Compass, href: "/pathways/clusters" },
   { id: "campus-reports", label: "Accountability Reports (TX)", icon: Building2, href: "/pathways/campus-reports" },
-  { id: "admin", label: "District Admin", icon: BarChart3, href: "/pathways/admin" },
   { id: "simulator", label: "A-F Simulator (TX)", icon: Gauge, href: "/pathways/simulator" },
+  { id: "ccmr-rules", label: "CCMR Rules (TX)", icon: BookOpen, href: "/pathways/ccmr-rules" },
+  { id: "admin", label: "District Admin", icon: BarChart3, href: "/pathways/admin" },
   { id: "data-upload", label: "Data Upload", icon: Upload, href: "/pathways/data-upload" },
   { id: "settings", label: "Settings", icon: Settings, href: "/pathways/settings" },
 ];
 
 // Nav item IDs that are only shown for TX (TEA A-F) districts
-const CCMR_ONLY_NAV_IDS = new Set(["campus-reports", "simulator"]);
+const CCMR_ONLY_NAV_IDS = new Set(["campus-reports", "simulator", "ccmr-rules"]);
 
 interface NavRailProps {
   activeItem?: string;

@@ -15,9 +15,22 @@ export async function createDistrict(data: {
   name: string;
   teaDistrictId: string;
   escRegion: string;
+  stateCode?: string;
 }): Promise<CreatedDistrict> {
   await requireSuperAdmin();
   const admin = createAdminClient();
+
+  // Look up the state by code (defaults to TX)
+  const stateCode = (data.stateCode ?? "TX").toUpperCase();
+  const { data: stateRow, error: stateError } = await admin
+    .from("states")
+    .select("id")
+    .eq("code", stateCode)
+    .single();
+
+  if (stateError || !stateRow) {
+    throw new Error(`State '${stateCode}' not found in states table`);
+  }
 
   const { data: district, error } = await admin
     .from("districts")
@@ -25,6 +38,7 @@ export async function createDistrict(data: {
       name: data.name.trim(),
       tea_district_id: data.teaDistrictId.trim() || null,
       esc_region: data.escRegion ? parseInt(data.escRegion) : null,
+      state_id: stateRow.id,
       state_avg_ccmr_rate: null,
       settings: {},
     })
