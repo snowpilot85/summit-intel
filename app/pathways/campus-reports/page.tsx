@@ -9,7 +9,7 @@ import { getCampusSummaries, getCampuses } from "@/lib/db/campuses";
 import { getUserContext } from "@/lib/db/users";
 
 export const metadata: Metadata = {
-  title: "Accountability Reports | Summit Pathways",
+  title: "Accountability Reports | Summit Insights",
   description: "Campus-by-campus accountability breakdown with action plans",
 };
 
@@ -49,7 +49,7 @@ export default async function Page() {
         notificationCount: 0,
       }}
       breadcrumbs={[
-        { label: "Summit Pathways", href: "/pathways" },
+        { label: "Summit Insights", href: "/pathways" },
         { label: "Accountability Reports (TX)" },
       ]}
       activeNavItem="campus-reports"

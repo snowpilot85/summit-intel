@@ -9,7 +9,7 @@ import { PathwaysAppShell } from "@/components/pathways/app-shell";
 import { AFSimulatorPage } from "@/components/pathways/af-simulator";
 
 export const metadata: Metadata = {
-  title: "A-F Simulator | Summit Pathways",
+  title: "A-F Simulator | Summit Insights",
   description: "Simulate TEA A-F accountability scores with real campus data",
 };
 
@@ -43,7 +43,7 @@ export default async function SimulatorPage() {
         notificationCount: 0,
       }}
       breadcrumbs={[
-        { label: "Summit Pathways", href: "/pathways" },
+        { label: "Summit Insights", href: "/pathways" },
         { label: "A-F Simulator (TX)" },
       ]}
       activeNavItem="simulator"

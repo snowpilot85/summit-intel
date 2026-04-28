@@ -8,7 +8,7 @@ import { CCMRRulesPage } from "@/components/pathways/ccmr-rules";
 import { getUserContext } from "@/lib/db/users";
 
 export const metadata: Metadata = {
-  title: "CCMR Rules Reference | Summit Pathways",
+  title: "CCMR Rules Reference | Summit Insights",
   description: "How Texas CCMR indicators are calculated — TEA 2025 Accountability Manual",
 };
 
@@ -40,7 +40,7 @@ export default async function CCMRRulesServerPage() {
         notificationCount: 0,
       }}
       breadcrumbs={[
-        { label: "Summit Pathways", href: "/pathways" },
+        { label: "Summit Insights", href: "/pathways" },
         { label: "CCMR Rules" },
       ]}
       activeNavItem="ccmr-rules"

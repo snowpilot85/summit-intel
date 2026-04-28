@@ -92,7 +92,7 @@ export const PathwaysHeader = ({
                   className="h-7 w-auto flex-shrink-0"
                   priority
                 />
-                <span className="text-[20px] font-semibold text-teal-300">Pathways</span>
+                <span className="text-[20px] font-semibold text-teal-300">Insights</span>
               </div>
               <p className="text-[11px] opacity-70 mt-1 tracking-wide">College, Career & Military Readiness</p>
             </div>
@@ -342,7 +342,7 @@ export const PathwaysAppShell = ({
   children,
   headerProps,
   breadcrumbs = [
-    { label: "Summit Pathways", href: "/pathways" },
+    { label: "Summit Insights", href: "/pathways" },
     { label: "Dashboard" },
   ],
   activeNavItem = "dashboard",

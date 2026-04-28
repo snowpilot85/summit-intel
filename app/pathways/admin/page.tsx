@@ -9,7 +9,7 @@ import { getAdminDashboard } from "@/lib/db/admin";
 import { getUserContext } from "@/lib/db/users";
 
 export const metadata: Metadata = {
-  title: "District Admin | Summit Pathways",
+  title: "District Admin | Summit Insights",
   description: "District-wide CTE pathway outcomes and equity dashboard",
 };
 
@@ -41,7 +41,7 @@ export default async function AdminPage() {
         isSuperAdmin,
       }}
       breadcrumbs={[
-        { label: "Summit Pathways", href: "/pathways" },
+        { label: "Summit Insights", href: "/pathways" },
         { label: "District Admin" },
       ]}
       activeNavItem="admin"

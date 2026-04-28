@@ -9,7 +9,7 @@ import { getUserContext } from "@/lib/db/users"
 import type { CcmrObDataRow } from "@/types/database"
 
 export const metadata: Metadata = {
-  title: "CCMR Outcomes Bonus Calculator | Summit Pathways",
+  title: "CCMR Outcomes Bonus Calculator | Summit Insights",
   description:
     "Model CCMR Outcomes Bonus earnings vs. funding left on the table for any Texas district",
 }
@@ -78,7 +78,7 @@ export default async function OutcomesBonusPage({
         notificationCount: 0,
       }}
       breadcrumbs={[
-        { label: "Summit Pathways", href: "/pathways" },
+        { label: "Summit Insights", href: "/pathways" },
         { label: "Outcomes Bonus Calculator" },
       ]}
       activeNavItem="outcomes-bonus"

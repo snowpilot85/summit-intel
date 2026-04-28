@@ -159,12 +159,12 @@ export default async function PathwaysStudentProfilePage({
       breadcrumbs={
         from === "interventions"
           ? [
-              { label: "Summit Pathways", href: "/pathways" },
+              { label: "Summit Insights", href: "/pathways" },
               { label: "Interventions", href: "/pathways/interventions" },
               { label: studentName },
             ]
           : [
-              { label: "Summit Pathways", href: "/pathways" },
+              { label: "Summit Insights", href: "/pathways" },
               { label: "Students", href: "/pathways/students" },
               { label: studentName },
             ]

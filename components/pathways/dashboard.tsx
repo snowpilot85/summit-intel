@@ -28,7 +28,7 @@ import type {
 import type { CampusCCMRSummaryRow, SnapshotRow, IndicatorType } from "@/types/database";
 
 /* ============================================
-   Summit Pathways Dashboard
+   Summit Insights Dashboard
    District-wide CCMR Overview
    ============================================ */
 
@@ -901,7 +901,7 @@ export const PathwaysDashboard = ({
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-[24px] font-semibold text-neutral-900">
-              Pathways Dashboard
+              Insights Dashboard
             </h1>
             <p className="text-[14px] text-neutral-600 mt-1">
               District-wide college, career, and military readiness overview
@@ -923,7 +923,7 @@ export const PathwaysDashboard = ({
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-[24px] font-semibold text-neutral-900">
-            Pathways Dashboard
+            Insights Dashboard
           </h1>
           <p className="text-[14px] text-neutral-600 mt-1">
             {hasCCMR

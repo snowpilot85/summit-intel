@@ -11,7 +11,7 @@ import { getCampuses } from "@/lib/db/campuses";
 import { getUserContext } from "@/lib/db/users";
 
 export const metadata: Metadata = {
-  title: "Interventions | Summit Pathways",
+  title: "Interventions | Summit Insights",
   description: "CCMR intervention pathways sorted by potential impact",
 };
 
@@ -63,7 +63,7 @@ export default async function Page() {
         notificationCount: 0,
       }}
       breadcrumbs={[
-        { label: "Summit Pathways", href: "/pathways" },
+        { label: "Summit Insights", href: "/pathways" },
         { label: "Interventions" },
       ]}
       activeNavItem="interventions"

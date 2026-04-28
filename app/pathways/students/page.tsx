@@ -82,7 +82,7 @@ export default async function PathwaysStudentsPage() {
         notificationCount: 0,
       }}
       breadcrumbs={[
-        { label: "Summit Pathways", href: "/pathways" },
+        { label: "Summit Insights", href: "/pathways" },
         { label: "Students" },
       ]}
       activeNavItem="students"

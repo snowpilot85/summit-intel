@@ -31,7 +31,7 @@ export function DistrictPicker({ districts, userName }: DistrictPickerProps) {
             className="h-7 w-auto"
             priority
           />
-          <span className="text-[20px] font-semibold text-teal-300">Pathways</span>
+          <span className="text-[20px] font-semibold text-teal-300">Insights</span>
         </div>
         <span className="text-[13px] text-white/70">{userName} · Super Admin</span>
       </header>

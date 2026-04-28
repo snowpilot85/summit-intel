@@ -9,7 +9,7 @@ import { getClusterExplorer } from "@/lib/db/clusters";
 import { getUserContext } from "@/lib/db/users";
 
 export const metadata: Metadata = {
-  title: "Career Cluster Explorer | Summit Pathways",
+  title: "Career Cluster Explorer | Summit Insights",
   description: "Browse all 16 career clusters, programs of study, credentials, and labor market data",
 };
 
@@ -41,7 +41,7 @@ export default async function ClustersPage() {
         isSuperAdmin,
       }}
       breadcrumbs={[
-        { label: "Summit Pathways", href: "/pathways" },
+        { label: "Summit Insights", href: "/pathways" },
         { label: "Cluster Explorer" },
       ]}
       activeNavItem="clusters"
