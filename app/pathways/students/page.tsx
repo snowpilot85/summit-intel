@@ -4,15 +4,12 @@ import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { PathwaysAppShell } from "@/components/pathways/app-shell";
 import { PathwaysStudents } from "@/components/pathways/students";
+import { PageHeader } from "@/components/layout/page-header";
 import { getStudents } from "@/lib/db/students";
 import { getIndicatorsForStudents } from "@/lib/db/indicators";
 import { getCampuses } from "@/lib/db/campuses";
 import { getUserContext } from "@/lib/db/users";
 import type { StudentPathwayEntry } from "@/app/pathways/students/actions";
-
-function formatRole(role: string): string {
-  return role.split("_").map((w) => w[0].toUpperCase() + w.slice(1)).join(" ");
-}
 
 export type CareerClusterOption = { id: string; code: string; name: string };
 
@@ -22,7 +19,7 @@ export default async function PathwaysStudentsPage() {
   const userCtx = await getUserContext(supabase);
   if (!userCtx) redirect("/login");
 
-  const { districtId, profile, districtName, schoolYearLabel, graduationDate } = userCtx;
+  const { districtId, profile, graduationDate } = userCtx;
   if (!districtId) redirect("/pathways");
   const isSuperAdmin = profile.role === "super_admin";
   const queryClient = isSuperAdmin ? createAdminClient() : supabase;
@@ -73,33 +70,31 @@ export default async function PathwaysStudentsPage() {
   });
 
   return (
-    <PathwaysAppShell
-      headerProps={{
-        userName: profile.full_name,
-        userRole: formatRole(profile.role),
-        districtName,
-        schoolYear: schoolYearLabel,
-        notificationCount: 0,
-      }}
-      breadcrumbs={[
-        { label: "Summit Insights", href: "/pathways" },
-        { label: "Students" },
-      ]}
-      activeNavItem="students"
-      isSuperAdmin={isSuperAdmin}
-      hasCCMR={userCtx.hasCCMR}
-    >
-      <PathwaysStudents
-        districtId={districtId}
-        initialStudents={students}
-        initialCount={count}
-        initialIndicators={indicators}
-        initialPathways={initialPathways}
-        campuses={campuses}
-        careerClusters={careerClusters}
-        graduationDate={graduationDate}
-        hasCCMR={userCtx.hasCCMR}
+    <>
+      <PageHeader
+        title="Students"
+        breadcrumbs={[
+          { label: "Summit Insights", href: "/pathways" },
+          { label: "Students" },
+        ]}
       />
-    </PathwaysAppShell>
+      <PathwaysAppShell
+        activeNavItem="students"
+        isSuperAdmin={isSuperAdmin}
+        hasCCMR={userCtx.hasCCMR}
+      >
+        <PathwaysStudents
+          districtId={districtId}
+          initialStudents={students}
+          initialCount={count}
+          initialIndicators={indicators}
+          initialPathways={initialPathways}
+          campuses={campuses}
+          careerClusters={careerClusters}
+          graduationDate={graduationDate}
+          hasCCMR={userCtx.hasCCMR}
+        />
+      </PathwaysAppShell>
+    </>
   );
 }

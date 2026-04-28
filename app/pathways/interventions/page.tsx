@@ -5,6 +5,7 @@ import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { PathwaysAppShell } from "@/components/pathways/app-shell";
 import { InterventionsPage } from "@/components/pathways/interventions";
+import { PageHeader } from "@/components/layout/page-header";
 import { getInterventions } from "@/lib/db/interventions";
 import { getStudentsByIds } from "@/lib/db/students";
 import { getCampuses } from "@/lib/db/campuses";
@@ -15,17 +16,13 @@ export const metadata: Metadata = {
   description: "CCMR intervention pathways sorted by potential impact",
 };
 
-function formatRole(role: string): string {
-  return role.split("_").map((w) => w[0].toUpperCase() + w.slice(1)).join(" ");
-}
-
 export default async function Page() {
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
   const userCtx = await getUserContext(supabase);
   if (!userCtx) redirect("/login");
 
-  const { districtId, profile, districtName, schoolYearLabel } = userCtx;
+  const { districtId, profile } = userCtx;
   if (!districtId) redirect("/pathways");
   const isSuperAdmin = profile.role === "super_admin";
   const queryClient = isSuperAdmin ? createAdminClient() : supabase;
@@ -54,29 +51,27 @@ export default async function Page() {
   const seniorCount = seniorCountResult.count ?? 0;
 
   return (
-    <PathwaysAppShell
-      headerProps={{
-        userName: profile.full_name,
-        userRole: formatRole(profile.role),
-        districtName,
-        schoolYear: schoolYearLabel,
-        notificationCount: 0,
-      }}
-      breadcrumbs={[
-        { label: "Summit Insights", href: "/pathways" },
-        { label: "Interventions" },
-      ]}
-      activeNavItem="interventions"
-      isSuperAdmin={isSuperAdmin}
-      hasCCMR={userCtx.hasCCMR}
-    >
-      <InterventionsPage
-        interventions={activeInterventions}
-        students={students}
-        campuses={campuses}
-        seniorCount={seniorCount}
-        hasCCMR={userCtx.hasCCMR}
+    <>
+      <PageHeader
+        title="Interventions"
+        breadcrumbs={[
+          { label: "Summit Insights", href: "/pathways" },
+          { label: "Interventions" },
+        ]}
       />
-    </PathwaysAppShell>
+      <PathwaysAppShell
+        activeNavItem="interventions"
+        isSuperAdmin={isSuperAdmin}
+        hasCCMR={userCtx.hasCCMR}
+      >
+        <InterventionsPage
+          interventions={activeInterventions}
+          students={students}
+          campuses={campuses}
+          seniorCount={seniorCount}
+          hasCCMR={userCtx.hasCCMR}
+        />
+      </PathwaysAppShell>
+    </>
   );
 }

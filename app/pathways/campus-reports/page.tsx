@@ -5,6 +5,7 @@ import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { PathwaysAppShell } from "@/components/pathways/app-shell";
 import { CampusReportsPage } from "@/components/pathways/campus-reports";
+import { PageHeader } from "@/components/layout/page-header";
 import { getCampusSummaries, getCampuses } from "@/lib/db/campuses";
 import { getUserContext } from "@/lib/db/users";
 
@@ -13,17 +14,13 @@ export const metadata: Metadata = {
   description: "Campus-by-campus accountability breakdown with action plans",
 };
 
-function formatRole(role: string): string {
-  return role.split("_").map((w) => w[0].toUpperCase() + w.slice(1)).join(" ");
-}
-
 export default async function Page() {
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
   const userCtx = await getUserContext(supabase);
   if (!userCtx) redirect("/login");
 
-  const { districtId, profile, districtName, schoolYearLabel } = userCtx;
+  const { districtId, profile } = userCtx;
   if (!districtId) redirect("/pathways");
   const isSuperAdmin = profile.role === "super_admin";
   const queryClient = isSuperAdmin ? createAdminClient() : supabase;
@@ -40,23 +37,21 @@ export default async function Page() {
   const currentSummaries = summaries.filter((s) => s.graduation_year === currentYear);
 
   return (
-    <PathwaysAppShell
-      headerProps={{
-        userName: profile.full_name,
-        userRole: formatRole(profile.role),
-        districtName,
-        schoolYear: schoolYearLabel,
-        notificationCount: 0,
-      }}
-      breadcrumbs={[
-        { label: "Summit Insights", href: "/pathways" },
-        { label: "Accountability Reports (TX)" },
-      ]}
-      activeNavItem="campus-reports"
-      isSuperAdmin={isSuperAdmin}
-      hasCCMR={userCtx.hasCCMR}
-    >
-      <CampusReportsPage summaries={currentSummaries} campuses={campuses} />
-    </PathwaysAppShell>
+    <>
+      <PageHeader
+        title="Accountability Reports (TX)"
+        breadcrumbs={[
+          { label: "Summit Insights", href: "/pathways" },
+          { label: "Accountability Reports (TX)" },
+        ]}
+      />
+      <PathwaysAppShell
+        activeNavItem="campus-reports"
+        isSuperAdmin={isSuperAdmin}
+        hasCCMR={userCtx.hasCCMR}
+      >
+        <CampusReportsPage summaries={currentSummaries} campuses={campuses} />
+      </PathwaysAppShell>
+    </>
   );
 }

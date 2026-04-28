@@ -5,14 +5,11 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import { PathwaysAppShell } from "@/components/pathways/app-shell";
 import { PathwaysDashboard } from "@/components/pathways/dashboard";
 import { DistrictPicker } from "@/components/pathways/district-picker";
+import { PageHeader } from "@/components/layout/page-header";
 import { getDashboardSummary, getIndicatorBreakdown, getPathwayMetrics } from "@/lib/db/dashboard";
 import { getCampusSummaries } from "@/lib/db/campuses";
 import { getAnnualSnapshots } from "@/lib/db/snapshots";
 import { getUserContext } from "@/lib/db/users";
-
-function formatRole(role: string): string {
-  return role.split("_").map((w) => w[0].toUpperCase() + w.slice(1)).join(" ");
-}
 
 export default async function PathwaysDashboardPage() {
   const cookieStore = await cookies();
@@ -45,9 +42,6 @@ export default async function PathwaysDashboardPage() {
   // super_admin → bypass RLS with admin client
   const queryClient = isSuperAdmin ? createAdminClient() : supabase;
 
-  const districtName = userCtx.districtName;
-  const schoolYearLabel = userCtx.schoolYearLabel;
-
   const [summary, campusSummaries, snapshots, indicators, pathwayMetrics] = await Promise.all([
     getDashboardSummary(queryClient, districtId, "all"),
     getCampusSummaries(queryClient, districtId),
@@ -57,31 +51,28 @@ export default async function PathwaysDashboardPage() {
   ]);
 
   return (
-    <PathwaysAppShell
-      headerProps={{
-        userName: profile.full_name,
-        userRole: formatRole(profile.role),
-        districtName,
-        schoolYear: schoolYearLabel,
-        notificationCount: 0,
-      }}
-      breadcrumbs={[
-        { label: "Summit Insights", href: "/pathways" },
-        { label: "Dashboard" },
-      ]}
-      activeNavItem="dashboard"
-      isSuperAdmin={isSuperAdmin}
-      hasCCMR={userCtx.hasCCMR}
-    >
-      <PathwaysDashboard
-        districtId={districtId}
-        initialSummary={summary}
-        initialCampusSummaries={campusSummaries}
-        initialSnapshots={snapshots}
-        initialIndicators={indicators}
-        initialPathwayMetrics={pathwayMetrics}
-        hasCCMR={userCtx.hasCCMR}
+    <>
+      <PageHeader
+        breadcrumbs={[
+          { label: "Summit Insights", href: "/pathways" },
+          { label: "Dashboard" },
+        ]}
       />
-    </PathwaysAppShell>
+      <PathwaysAppShell
+        activeNavItem="dashboard"
+        isSuperAdmin={isSuperAdmin}
+        hasCCMR={userCtx.hasCCMR}
+      >
+        <PathwaysDashboard
+          districtId={districtId}
+          initialSummary={summary}
+          initialCampusSummaries={campusSummaries}
+          initialSnapshots={snapshots}
+          initialIndicators={indicators}
+          initialPathwayMetrics={pathwayMetrics}
+          hasCCMR={userCtx.hasCCMR}
+        />
+      </PathwaysAppShell>
+    </>
   );
 }

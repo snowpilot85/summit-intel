@@ -7,15 +7,12 @@ import { getUserContext } from "@/lib/db/users";
 import { getCampusSummaries, getCampuses } from "@/lib/db/campuses";
 import { PathwaysAppShell } from "@/components/pathways/app-shell";
 import { AFSimulatorPage } from "@/components/pathways/af-simulator";
+import { PageHeader } from "@/components/layout/page-header";
 
 export const metadata: Metadata = {
   title: "A-F Simulator | Summit Insights",
   description: "Simulate TEA A-F accountability scores with real campus data",
 };
-
-function formatRole(role: string): string {
-  return role.split("_").map((w) => w[0].toUpperCase() + w.slice(1)).join(" ");
-}
 
 export default async function SimulatorPage() {
   const cookieStore = await cookies();
@@ -23,7 +20,7 @@ export default async function SimulatorPage() {
   const userCtx = await getUserContext(supabase);
   if (!userCtx) redirect("/login");
 
-  const { districtId, profile, districtName, schoolYearLabel } = userCtx;
+  const { districtId, profile } = userCtx;
   if (!districtId) redirect("/pathways");
   const isSuperAdmin = profile.role === "super_admin";
   const queryClient = isSuperAdmin ? createAdminClient() : supabase;
@@ -34,23 +31,21 @@ export default async function SimulatorPage() {
   ]);
 
   return (
-    <PathwaysAppShell
-      headerProps={{
-        userName: profile.full_name,
-        userRole: formatRole(profile.role),
-        districtName,
-        schoolYear: schoolYearLabel,
-        notificationCount: 0,
-      }}
-      breadcrumbs={[
-        { label: "Summit Insights", href: "/pathways" },
-        { label: "A-F Simulator (TX)" },
-      ]}
-      activeNavItem="simulator"
-      isSuperAdmin={isSuperAdmin}
-      hasCCMR={userCtx.hasCCMR}
-    >
-      <AFSimulatorPage summaries={summaries} campuses={campuses} />
-    </PathwaysAppShell>
+    <>
+      <PageHeader
+        title="A-F Simulator (TX)"
+        breadcrumbs={[
+          { label: "Summit Insights", href: "/pathways" },
+          { label: "A-F Simulator (TX)" },
+        ]}
+      />
+      <PathwaysAppShell
+        activeNavItem="simulator"
+        isSuperAdmin={isSuperAdmin}
+        hasCCMR={userCtx.hasCCMR}
+      >
+        <AFSimulatorPage summaries={summaries} campuses={campuses} />
+      </PathwaysAppShell>
+    </>
   );
 }

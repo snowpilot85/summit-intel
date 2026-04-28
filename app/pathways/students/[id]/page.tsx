@@ -4,15 +4,12 @@ import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { PathwaysAppShell } from "@/components/pathways/app-shell";
 import { PathwaysStudentProfile } from "@/components/pathways/student-profile";
+import { PageHeader } from "@/components/layout/page-header";
 import { getStudentById } from "@/lib/db/students";
 import { getStudentIndicators } from "@/lib/db/indicators";
 import { getInterventions } from "@/lib/db/interventions";
 import { getUserContext } from "@/lib/db/users";
 import type { WorkBasedLearningRow } from "@/types/database";
-
-function formatRole(role: string): string {
-  return role.split("_").map((w) => w[0].toUpperCase() + w.slice(1)).join(" ");
-}
 
 export type CredentialProgressItem = {
   credentialId: string;
@@ -41,7 +38,7 @@ export default async function PathwaysStudentProfilePage({
   const userCtx = await getUserContext(supabase);
   if (!userCtx) redirect("/login");
 
-  const { districtId, profile, districtName, schoolYearLabel, graduationDate } = userCtx;
+  const { districtId, profile, graduationDate } = userCtx;
   if (!districtId) redirect("/pathways");
   const isSuperAdmin = profile.role === "super_admin";
   const queryClient = isSuperAdmin ? createAdminClient() : supabase;
@@ -147,44 +144,47 @@ export default async function PathwaysStudentProfilePage({
   const wblRecords = (wblResult.data ?? []) as WorkBasedLearningRow[];
   const studentName = `${student.first_name} ${student.last_name}`;
 
+  const breadcrumbs =
+    from === "interventions"
+      ? [
+          { label: "Summit Insights", href: "/pathways" },
+          { label: "Interventions", href: "/pathways/interventions" },
+          { label: studentName },
+        ]
+      : [
+          { label: "Summit Insights", href: "/pathways" },
+          { label: "Students", href: "/pathways/students" },
+          { label: studentName },
+        ];
+
+  const backHref =
+    from === "interventions" ? "/pathways/interventions" : "/pathways/students";
+
   return (
-    <PathwaysAppShell
-      headerProps={{
-        userName: profile.full_name,
-        userRole: formatRole(profile.role),
-        districtName,
-        schoolYear: schoolYearLabel,
-        notificationCount: 0,
-      }}
-      breadcrumbs={
-        from === "interventions"
-          ? [
-              { label: "Summit Insights", href: "/pathways" },
-              { label: "Interventions", href: "/pathways/interventions" },
-              { label: studentName },
-            ]
-          : [
-              { label: "Summit Insights", href: "/pathways" },
-              { label: "Students", href: "/pathways/students" },
-              { label: studentName },
-            ]
-      }
-      activeNavItem={from === "interventions" ? "interventions" : "students"}
-      isSuperAdmin={isSuperAdmin}
-      hasCCMR={userCtx.hasCCMR}
-    >
-      <PathwaysStudentProfile
-        student={student}
-        indicators={indicators}
-        interventions={interventions}
-        campusName={campusName}
-        graduationDate={graduationDate}
-        pathway={pathway}
-        credentialProgress={credentialProgress}
-        wblRecords={wblRecords}
-        from={from}
-        hasCCMR={userCtx.hasCCMR}
+    <>
+      <PageHeader
+        title={studentName}
+        breadcrumbs={breadcrumbs}
+        backHref={backHref}
       />
-    </PathwaysAppShell>
+      <PathwaysAppShell
+        activeNavItem={from === "interventions" ? "interventions" : "students"}
+        isSuperAdmin={isSuperAdmin}
+        hasCCMR={userCtx.hasCCMR}
+      >
+        <PathwaysStudentProfile
+          student={student}
+          indicators={indicators}
+          interventions={interventions}
+          campusName={campusName}
+          graduationDate={graduationDate}
+          pathway={pathway}
+          credentialProgress={credentialProgress}
+          wblRecords={wblRecords}
+          from={from}
+          hasCCMR={userCtx.hasCCMR}
+        />
+      </PathwaysAppShell>
+    </>
   );
 }

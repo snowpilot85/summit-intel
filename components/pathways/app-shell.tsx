@@ -259,10 +259,10 @@ const pathwaysNavItems = [
   { id: "students", label: "Students", icon: Users, href: "/pathways/students" },
   { id: "interventions", label: "Interventions", icon: Target, href: "/pathways/interventions" },
   { id: "clusters", label: "Cluster Explorer", icon: Compass, href: "/pathways/clusters" },
-  { id: "campus-reports", label: "Accountability Reports (TX)", icon: Building2, href: "/pathways/campus-reports" },
-  { id: "simulator", label: "A-F Simulator (TX)", icon: Gauge, href: "/pathways/simulator" },
-  { id: "outcomes-bonus", label: "Outcomes Bonus (TX)", icon: DollarSign, href: "/pathways/outcomes-bonus" },
-  { id: "ccmr-rules", label: "CCMR Rules (TX)", icon: BookOpen, href: "/pathways/ccmr-rules" },
+  { id: "campus-reports", label: "Accountability Reports", icon: Building2, href: "/pathways/campus-reports" },
+  { id: "simulator", label: "A-F Simulator", icon: Gauge, href: "/pathways/simulator" },
+  { id: "outcomes-bonus", label: "Outcomes Bonus", icon: DollarSign, href: "/pathways/outcomes-bonus" },
+  { id: "ccmr-rules", label: "CCMR Rules", icon: BookOpen, href: "/pathways/ccmr-rules" },
   { id: "admin", label: "District Admin", icon: BarChart3, href: "/pathways/admin" },
   { id: "data-upload", label: "Data Upload", icon: Upload, href: "/pathways/data-upload" },
   { id: "settings", label: "Settings", icon: Settings, href: "/pathways/settings" },
@@ -350,14 +350,14 @@ export const PathwaysAppShell = ({
   isSuperAdmin,
   hasCCMR = true,
 }: PathwaysAppShellProps) => {
+  // PathwaysHeader is no longer rendered — global chrome is owned by
+  // <SiteHeader /> (mounted via app/pathways/layout.tsx). Per-page context
+  // (title, breadcrumbs, district/year chip) belongs in <PageHeader>.
+  // headerProps is intentionally accepted but unused during the migration.
+  void headerProps;
+  void breadcrumbs;
   return (
     <div className="min-h-screen flex flex-col bg-neutral-50">
-      {/* Header */}
-      <PathwaysHeader {...headerProps} isSuperAdmin={isSuperAdmin} />
-
-      {/* Breadcrumbs */}
-      <PathwaysBreadcrumbs items={breadcrumbs} />
-
       {/* Main Layout */}
       <div className="flex flex-1">
         {/* Nav Rail */}
