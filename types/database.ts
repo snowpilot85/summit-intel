@@ -514,6 +514,45 @@ export type WorkBasedLearningInsert = Omit<WorkBasedLearningRow, 'id' | 'created
 export type WorkBasedLearningUpdate = Partial<WorkBasedLearningInsert>
 
 // ============================================================
+// CCMR OUTCOMES BONUS — TEA Annual Graduates Early Counts
+// Source: tea.texas.gov performance reporting, refreshed annually each August.
+// ============================================================
+
+export type CcmrObDataRow = {
+  cdn: string                          // 6-digit County-District Number, zero-padded
+  district_name: string
+  county?: string | null               // not present in current table; reserved
+  region?: string | null               // not present in current table; reserved
+
+  // Counts by group — null when TEA masks small-cell data
+  ed_grads: number | null
+  ed_met_ob: number | null
+  ed_above_threshold: number | null
+  non_ed_grads: number | null
+  non_ed_met_ob: number | null
+  non_ed_above_threshold: number | null
+  sped_grads: number | null
+  sped_met_ob: number | null
+  sped_above_threshold: number | null
+
+  // Pre-calculated dollars
+  ed_earned: number
+  non_ed_earned: number
+  sped_earned: number
+  total_earned: number
+
+  ed_max: number
+  non_ed_max: number
+  sped_max: number
+  total_max: number
+
+  total_left_on_table: number
+}
+
+export type CcmrObDataInsert = CcmrObDataRow
+export type CcmrObDataUpdate = Partial<CcmrObDataRow>
+
+// ============================================================
 // DATABASE TYPE — generic for SupabaseClient<Database>
 //
 // Row types in this interface use `& Record<string, unknown>` so that
@@ -647,6 +686,12 @@ export interface Database {
         Row: Indexed<WorkBasedLearningRow>
         Insert: WorkBasedLearningInsert
         Update: WorkBasedLearningUpdate
+        Relationships: []
+      }
+      ccmr_ob_data: {
+        Row: Indexed<CcmrObDataRow>
+        Insert: CcmrObDataInsert
+        Update: CcmrObDataUpdate
         Relationships: []
       }
     }
