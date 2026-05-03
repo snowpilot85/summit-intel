@@ -3,7 +3,7 @@
 import { cookies } from "next/headers";
 import { createClient } from "@/utils/supabase/server";
 import { getAuthContext } from "@/lib/db/users";
-import { getStudents } from "@/lib/db/students";
+import { enrichStudents, getStudents, type EnrichedStudentRow } from "@/lib/db/students";
 import { getIndicatorsForStudents } from "@/lib/db/indicators";
 import type { CCMRReadiness, IndicatorRow, StudentRow } from "@/types/database";
 
@@ -34,7 +34,7 @@ export type StudentPathwayEntry = {
 };
 
 export interface StudentPageData {
-  students: StudentRow[];
+  students: EnrichedStudentRow[];
   count: number;
   indicators: IndicatorRow[];
   pathwaysByStudent: StudentPathwayEntry[];
@@ -61,7 +61,7 @@ async function fetchStudentsWithFilters(
   districtId: string,
   filters: StudentFilters,
   clusterUuid: string | null,
-): Promise<{ students: StudentRow[]; count: number }> {
+): Promise<{ students: EnrichedStudentRow[]; count: number }> {
   const {
     page = 1, campusId, gradeLevel, readiness,
     isEb, isEconDisadvantaged, isSpecialEd, is504, search,
@@ -107,12 +107,12 @@ async function fetchStudentsWithFilters(
     if (error) throw new Error(error.message);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const students = (data ?? []).map((row: any) => {
+    const rawStudents = (data ?? []).map((row: any) => {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { student_pathways: _sp, ...studentFields } = row;
       return studentFields as StudentRow;
     });
-
+    const students = await enrichStudents(queryClient, rawStudents);
     return { students, count: count ?? 0 };
   }
 
@@ -181,7 +181,8 @@ async function fetchStudentsWithFilters(
   const { data: studentData, error: sError } = await studentQ;
   if (sError) throw new Error(sError.message);
 
-  return { students: studentData ?? [], count: total };
+  const enriched = await enrichStudents(queryClient, (studentData ?? []) as StudentRow[]);
+  return { students: enriched, count: total };
 }
 
 export async function fetchStudentPage(

@@ -5,6 +5,7 @@ import { createClient } from "@/utils/supabase/server"
 import { createAdminClient } from "@/utils/supabase/admin"
 import { PathwaysAppShell } from "@/components/pathways/app-shell"
 import { OutcomesBonusCalculator } from "@/components/pathways/outcomes-bonus"
+import { PageHeader } from "@/components/layout/page-header"
 import { getUserContext } from "@/lib/db/users"
 import type { CcmrObDataRow } from "@/types/database"
 
@@ -15,10 +16,6 @@ export const metadata: Metadata = {
 }
 
 export const dynamic = "force-dynamic"
-
-function formatRole(role: string): string {
-  return role.split("_").map((w) => w[0].toUpperCase() + w.slice(1)).join(" ")
-}
 
 type DistrictListItem = Pick<
   CcmrObDataRow,
@@ -35,7 +32,7 @@ export default async function OutcomesBonusPage({
   const userCtx = await getUserContext(supabase)
   if (!userCtx) redirect("/login")
 
-  const { districtId, profile, districtName, schoolYearLabel } = userCtx
+  const { districtId, profile } = userCtx
   if (!districtId) redirect("/pathways")
   if (!userCtx.hasCCMR) redirect("/pathways")
 
@@ -69,27 +66,24 @@ export default async function OutcomesBonusPage({
   const selectionMissing = Boolean(selectedCdn) && !selectedDistrict
 
   return (
-    <PathwaysAppShell
-      headerProps={{
-        userName: profile.full_name,
-        userRole: formatRole(profile.role),
-        districtName,
-        schoolYear: schoolYearLabel,
-        notificationCount: 0,
-      }}
-      breadcrumbs={[
-        { label: "Summit Insights", href: "/pathways" },
-        { label: "Outcomes Bonus Calculator" },
-      ]}
-      activeNavItem="outcomes-bonus"
-      isSuperAdmin={isSuperAdmin}
-      hasCCMR={userCtx.hasCCMR}
-    >
-      <OutcomesBonusCalculator
-        districts={districts}
-        selectedDistrict={selectedDistrict}
-        selectionMissing={selectionMissing}
+    <>
+      <PageHeader
+        breadcrumbs={[
+          { label: "Summit Insights", href: "/pathways" },
+          { label: "Outcomes Bonus" },
+        ]}
       />
-    </PathwaysAppShell>
+      <PathwaysAppShell
+        activeNavItem="outcomes-bonus"
+        isSuperAdmin={isSuperAdmin}
+        hasCCMR={userCtx.hasCCMR}
+      >
+        <OutcomesBonusCalculator
+          districts={districts}
+          selectedDistrict={selectedDistrict}
+          selectionMissing={selectionMissing}
+        />
+      </PathwaysAppShell>
+    </>
   )
 }

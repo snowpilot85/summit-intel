@@ -185,6 +185,36 @@ const CampusSelector = ({
 // ALL-CAMPUSES COMPARISON TABLE
 // ============================================
 
+// Inline helper — campus rows are still keyed on graduation_year
+// from the legacy v_campus_ccmr_summary view. Until that view is
+// re-keyed on cohort_year, we tag each row's methodology bucket by
+// the same TX heuristic the cohort code uses (≤ 2029 binary,
+// ≥ 2030 tiered). This is honest signaling, not a blended number.
+function methodologyForGradYear(year: number): "binary" | "tiered" {
+  return year <= 2029 ? "binary" : "tiered";
+}
+
+const MethodologyTag = ({ year }: { year: number }) => {
+  const m = methodologyForGradYear(year);
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium",
+        m === "tiered"
+          ? "bg-success-light text-success-dark"
+          : "bg-neutral-100 text-neutral-600"
+      )}
+      title={
+        m === "tiered"
+          ? "Class assessed under tiered CCMR (HB 2)"
+          : "Class assessed under binary CCMR (19 TAC §61.1028)"
+      }
+    >
+      {m === "tiered" ? "Tiered" : "Binary"}
+    </span>
+  );
+};
+
 const ComparisonTable = ({
   summaries,
   onSelectCampus,
@@ -192,40 +222,86 @@ const ComparisonTable = ({
   summaries: CampusCCMRSummaryRow[];
   onSelectCampus: (id: string) => void;
 }) => {
-  const sorted = [...summaries].sort((a, b) => b.ccmr_rate - a.ccmr_rate);
+  // Group by cohort (graduation_year) so mixed-methodology districts
+  // never see a single blended row order. Each cohort renders its own
+  // sub-table with the methodology in the heading.
+  const cohorts = React.useMemo(() => {
+    const grouped = new Map<number, CampusCCMRSummaryRow[]>();
+    for (const s of summaries) {
+      const list = grouped.get(s.graduation_year) ?? [];
+      list.push(s);
+      grouped.set(s.graduation_year, list);
+    }
+    return Array.from(grouped.entries())
+      .map(([year, rows]) => ({
+        year,
+        methodology: methodologyForGradYear(year),
+        rows: [...rows].sort((a, b) => b.ccmr_rate - a.ccmr_rate),
+      }))
+      .sort((a, b) => a.year - b.year);
+  }, [summaries]);
 
-  return (
-    <div className="bg-neutral-0 border border-neutral-200 rounded-lg overflow-hidden">
-      <div className="px-6 py-4 border-b border-neutral-200">
-        <h2 className="text-[17px] font-semibold text-neutral-900">Campus comparison</h2>
-        <p className="text-[13px] text-neutral-500 mt-0.5">
-          Current school year · Grade 12 seniors · Click a row to drill in
+  const hasMixedMethodologies = React.useMemo(
+    () => new Set(cohorts.map((c) => c.methodology)).size > 1,
+    [cohorts]
+  );
+
+  if (cohorts.length === 0) {
+    return (
+      <div className="bg-neutral-0 border border-neutral-200 rounded-lg overflow-hidden">
+        <div className="px-6 py-4 border-b border-neutral-200">
+          <h2 className="text-[17px] font-semibold text-neutral-900">Campus comparison</h2>
+        </div>
+        <p className="px-6 py-10 text-center text-[13px] text-neutral-500">
+          No campus data available.
         </p>
       </div>
+    );
+  }
 
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr className="bg-neutral-50 border-b border-neutral-200">
-              <th className="text-left text-[12px] font-semibold text-neutral-700 px-4 py-3">Campus</th>
-              <th className="text-right text-[12px] font-semibold text-neutral-700 px-4 py-3">Seniors</th>
-              <th className="text-right text-[12px] font-semibold text-neutral-700 px-4 py-3">CCMR met</th>
-              <th className="text-right text-[12px] font-semibold text-neutral-700 px-4 py-3">CCMR rate</th>
-              <th className="text-right text-[12px] font-semibold text-neutral-700 px-4 py-3">% EB</th>
-              <th className="text-right text-[12px] font-semibold text-neutral-700 px-4 py-3">EB rate</th>
-              <th className="text-right text-[12px] font-semibold text-neutral-700 px-4 py-3">At risk</th>
-              <th className="text-right text-[12px] font-semibold text-neutral-700 px-4 py-3">Missing ED forms</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sorted.length === 0 ? (
-              <tr>
-                <td colSpan={8} className="px-4 py-10 text-center text-[13px] text-neutral-500">
-                  No campus data available for this school year.
-                </td>
-              </tr>
-            ) : (
-              sorted.map((s) => (
+  return (
+    <div className="space-y-4">
+      {hasMixedMethodologies && (
+        <div className="bg-info-light border border-info/30 rounded-lg p-4 flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-info-dark flex-shrink-0 mt-0.5" />
+          <p className="text-[13px] text-info-dark">
+            This view contains cohorts on multiple CCMR methodologies. Per the
+            TEA framework, scores are reported per cohort and never blended.
+            Compare campuses within the same Class section below.
+          </p>
+        </div>
+      )}
+
+      {cohorts.map((cohort) => (
+        <div key={cohort.year} className="bg-neutral-0 border border-neutral-200 rounded-lg overflow-hidden">
+          <div className="px-6 py-4 border-b border-neutral-200 flex items-center gap-3">
+            <div>
+              <h2 className="text-[17px] font-semibold text-neutral-900">
+                Class of {cohort.year}
+              </h2>
+              <p className="text-[13px] text-neutral-500 mt-0.5">
+                Click a row to drill in
+              </p>
+            </div>
+            <MethodologyTag year={cohort.year} />
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-neutral-50 border-b border-neutral-200">
+                  <th className="text-left text-[12px] font-semibold text-neutral-700 px-4 py-3">Campus</th>
+                  <th className="text-right text-[12px] font-semibold text-neutral-700 px-4 py-3">Seniors</th>
+                  <th className="text-right text-[12px] font-semibold text-neutral-700 px-4 py-3">CCMR met</th>
+                  <th className="text-right text-[12px] font-semibold text-neutral-700 px-4 py-3">CCMR rate</th>
+                  <th className="text-right text-[12px] font-semibold text-neutral-700 px-4 py-3">% EB</th>
+                  <th className="text-right text-[12px] font-semibold text-neutral-700 px-4 py-3">EB rate</th>
+                  <th className="text-right text-[12px] font-semibold text-neutral-700 px-4 py-3">At risk</th>
+                  <th className="text-right text-[12px] font-semibold text-neutral-700 px-4 py-3">Missing ED forms</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cohort.rows.map((s) => (
                 <tr
                   key={s.campus_id}
                   onClick={() => onSelectCampus(s.campus_id)}
@@ -289,11 +365,12 @@ const ComparisonTable = ({
                     )}
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ))}
     </div>
   );
 };

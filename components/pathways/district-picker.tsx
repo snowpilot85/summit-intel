@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { Building2, Plus, ChevronRight } from "lucide-react";
 import { selectDistrict } from "@/app/pathways/actions";
 
@@ -17,25 +16,12 @@ interface DistrictPickerProps {
   userName: string;
 }
 
-export function DistrictPicker({ districts, userName }: DistrictPickerProps) {
+export function DistrictPicker({ districts, userName: _userName }: DistrictPickerProps) {
+  // The old internal blue header was removed — SiteHeader (white,
+  // mounted by app/pathways/layout.tsx) is the global chrome and
+  // already shows the user's name + role.
   return (
     <div className="min-h-screen bg-neutral-50">
-      {/* Header */}
-      <header className="bg-primary-500 text-white px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Image
-            src="/images/summit-k12-logo-white.png"
-            alt="Summit K12"
-            width={120}
-            height={32}
-            className="h-7 w-auto"
-            priority
-          />
-          <span className="text-[20px] font-semibold text-teal-300">Insights</span>
-        </div>
-        <span className="text-[13px] text-white/70">{userName} · Super Admin</span>
-      </header>
-
       <div className="max-w-4xl mx-auto px-6 py-10">
         <div className="mb-8">
           <h1 className="text-[26px] font-semibold text-neutral-900">Select a district</h1>

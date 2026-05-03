@@ -9,7 +9,7 @@ import { getStudentById } from "@/lib/db/students";
 import { getStudentIndicators } from "@/lib/db/indicators";
 import { getInterventions } from "@/lib/db/interventions";
 import { getUserContext } from "@/lib/db/users";
-import type { WorkBasedLearningRow } from "@/types/database";
+import type { CcmrIndicatorResultRow, WorkBasedLearningRow } from "@/types/database";
 
 export type CredentialProgressItem = {
   credentialId: string;
@@ -100,7 +100,7 @@ export default async function PathwaysStudentProfilePage({
     state_credential_catalog: CredentialCatalogShape | null;
   };
 
-  const [credentialResult, wblResult] = await Promise.all([
+  const [credentialResult, wblResult, tieredResult] = await Promise.all([
     programId
       ? (queryClient as ReturnType<typeof createAdminClient>)
           .from("pathway_credentials")
@@ -113,7 +113,16 @@ export default async function PathwaysStudentProfilePage({
       .select("*")
       .eq("student_id", id)
       .order("start_date", { ascending: false }),
+    // Phase 1 CCMR: per-indicator tier results. Empty until the
+    // recompute service has run for this student. The component
+    // gracefully falls back to a "not yet computed" state.
+    queryClient
+      .from("ccmr_indicator_results")
+      .select("*")
+      .eq("student_id", id),
   ]);
+
+  const tieredIndicatorResults = (tieredResult.data ?? []) as CcmrIndicatorResultRow[];
 
   // Build credential progress items
   const credentialProgress: CredentialProgressItem[] = (
@@ -175,6 +184,7 @@ export default async function PathwaysStudentProfilePage({
         <PathwaysStudentProfile
           student={student}
           indicators={indicators}
+          tieredIndicatorResults={tieredIndicatorResults}
           interventions={interventions}
           campusName={campusName}
           graduationDate={graduationDate}

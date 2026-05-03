@@ -36,6 +36,168 @@ export type EvaluationLine = {
 };
 
 // ─────────────────────────────────────────────
+// TIERED METHODOLOGY (cohorts 2030+)
+//
+// Rules data for the CCMR Rules Reference page. Drives the binary
+// vs. tiered toggle on /pathways/ccmr-rules. Tiered methodology is
+// HB 2 (89th Tex. Leg., 2025), effective for the cohort entering
+// 9th grade Fall 2026 / graduating 2030. See docs/methodology.md.
+// ─────────────────────────────────────────────
+
+export type TieredCategory = "college" | "career" | "military";
+export type TieredLevel = "foundational" | "demonstrated" | "advanced";
+
+export interface TieredPathwayRule {
+  category: TieredCategory;
+  /** Short human label, e.g. "TSI via SAT/ACT/TSIA". */
+  label: string;
+  /** Long-form description that earns this tier. */
+  description: string;
+}
+
+export interface TieredLevelDefinition {
+  level: TieredLevel;
+  headline: string;
+  description: string;
+  pathways: TieredPathwayRule[];
+}
+
+export const TIERED_METHODOLOGY: {
+  id: "tx_tiered_2030";
+  displayName: string;
+  applicability: string;
+  scoringRule: string;
+  criticalRules: string[];
+  levels: TieredLevelDefinition[];
+} = {
+  id: "tx_tiered_2030",
+  displayName: "TEA CCMR — Tiered (HB 2)",
+  applicability:
+    "Applies to graduating class 2030 and later (cohort entering 9th grade Fall 2026 onward).",
+  scoringRule:
+    "A student earns credit for the HIGHEST level achieved across all indicators. Foundational < Demonstrated < Advanced. The campus's CCMR raw score is the average of three percentages: % Foundational+, % Demonstrated+, and % Advanced — denominator is annual grads.",
+  criticalRules: [
+    "TSI Math + RLA gate (hard): a student missing either subject earns nothing from the TSI pathway. SAT Math passing alone does NOT satisfy TSI without an RLA component.",
+    "CPC downgrade rule: if TSI is satisfied via an approved College Prep Course in either subject AND no tested pathway covers that subject, the TSI indicator caps at Foundational.",
+    "Three CTE credentials are tracked separately and never conflated: IBC (industry-issued, district-reported, tiered 1/2/3), Level I Certificate (THECB), Level II Certificate (THECB).",
+    "Same-tier-different-category does not stack — a student Advanced on a career indicator and Demonstrated on a college indicator gets credit for Advanced (career) only.",
+  ],
+  levels: [
+    {
+      level: "foundational",
+      headline: "Foundational",
+      description: "Lowest tier — represents baseline postsecondary preparation.",
+      pathways: [
+        {
+          category: "college",
+          label: "TSI via College Prep Course (CPC)",
+          description:
+            "TSI criteria met using an approved College Prep Course in either Math or RLA. Caps at Foundational regardless of any other TSI components.",
+        },
+        {
+          category: "college",
+          label: "Potential college credit (single threshold)",
+          description:
+            "≥ 1 AP exam pass, OR ≥ 1 IB exam pass, OR ≥ 3 SCH OnRamps, OR ≥ 3 SCH dual credit.",
+        },
+        {
+          category: "career",
+          label: "CTE Completer + Tier 3 IBC",
+          description:
+            "Coherent CTE sequence completed with a Tier 3 industry-based certification.",
+        },
+        {
+          category: "military",
+          label: "JROTC + AFQT 31–49",
+          description: "JROTC sequence completed with AFQT score in the 31–49 range.",
+        },
+      ],
+    },
+    {
+      level: "demonstrated",
+      headline: "Demonstrated",
+      description: "Middle tier — measurable evidence of postsecondary readiness.",
+      pathways: [
+        {
+          category: "college",
+          label: "TSI via SAT / ACT / TSIA (Math + RLA)",
+          description:
+            "Both Math and RLA subjects satisfied through SAT, ACT, or TSIA — no CPC downgrade.",
+        },
+        {
+          category: "career",
+          label: "CTE Completer + Tier 2 IBC",
+          description:
+            "Coherent CTE sequence completed with a Tier 2 industry-based certification.",
+        },
+        {
+          category: "college",
+          label: "SpEd Advanced Diploma",
+          description: "Special education student earns the Advanced High School Diploma.",
+        },
+        {
+          category: "career",
+          label: "Workforce Ready IEP Diploma",
+          description: "IEP-aligned workforce-ready diploma.",
+        },
+        {
+          category: "military",
+          label: "JROTC + AFQT 50–64",
+          description: "JROTC sequence completed with AFQT score in the 50–64 range.",
+        },
+      ],
+    },
+    {
+      level: "advanced",
+      headline: "Advanced",
+      description: "Highest tier — strongest evidence of postsecondary readiness.",
+      pathways: [
+        {
+          category: "college",
+          label: "Associate Degree",
+          description:
+            "Associate degree earned from a Texas public institution while enrolled in high school.",
+        },
+        {
+          category: "college",
+          label: "TSI tested + potential college credit",
+          description:
+            "TSI satisfied via SAT/ACT/TSIA AND meets a potential college credit threshold (AP / IB / OnRamps 3+ / dual credit 3+).",
+        },
+        {
+          category: "career",
+          label: "Level I or Level II Certificate",
+          description: "THECB-recognized Level I or Level II workforce certificate.",
+        },
+        {
+          category: "career",
+          label: "CTE Completer + Tier 1 IBC",
+          description:
+            "Coherent CTE sequence completed with a Tier 1 industry-based certification.",
+        },
+        {
+          category: "military",
+          label: "Military Enlistment",
+          description: "Confirmed post-graduation enlistment in any branch of the U.S. Armed Forces.",
+        },
+        {
+          category: "military",
+          label: "JROTC + AFQT 65+",
+          description: "JROTC sequence completed with AFQT score 65 or higher.",
+        },
+      ],
+    },
+  ],
+};
+
+export const BINARY_METHODOLOGY_META = {
+  id: "tx_binary" as const,
+  displayName: "TEA CCMR — Binary (19 TAC §61.1028)",
+  applicability:
+    "Applies to graduating class 2029 and earlier. Each indicator is met or not met; meeting any one indicator counts as CCMR Met.",
+};
+
+// ─────────────────────────────────────────────
 // RULES DATA
 // ─────────────────────────────────────────────
 

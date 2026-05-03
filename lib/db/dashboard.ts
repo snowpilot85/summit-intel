@@ -1,4 +1,4 @@
-import type { TypedSupabaseClient, IndicatorType, CCMRReadiness } from '@/types/database'
+import type { TypedSupabaseClient, IndicatorType, CCMRReadiness, MethodologyKey } from '@/types/database'
 
 export type SubgroupFilter = 'all' | 'eb' | 'econ' | 'sped'
 
@@ -143,6 +143,154 @@ export async function getPathwayMetrics(
     credentialPercent: studentsWithPathways > 0 ? Math.round((credentialsEarned / studentsWithPathways) * 100) : 0,
     topClusters,
   }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// PER-COHORT CCMR SCORE ROLLUPS
+//
+// Drives the dashboard's mixed-methodology cohort breakdown. Reads
+// from v_ccmr_score_tiered and v_ccmr_score_binary (migration
+// 20260428000003_ccmr_status_and_rollups). Each cohort_year is a
+// separate row tagged with its methodology — the dashboard MUST
+// render these as distinct rows / chart series and NEVER blend a
+// single % CCMR rate across mixed methodologies.
+// See docs/methodology.md, "Per-cohort segmentation rule."
+//
+// Both views are keyed on graduated cohorts (cohort_status = 'graduated').
+// Active cohorts in-progress have no score yet — that's the canonical
+// behavior; in-progress projections live in the existing summary
+// query for grade-12 seniors only.
+// ─────────────────────────────────────────────────────────────────
+
+export interface CohortScoreRow {
+  district_id: string
+  campus_id: string
+  cohort_year: number
+  methodology: 'tiered' | 'binary'
+  /** Annual graduates (denominator) for this cohort on this campus. */
+  annualGrads: number
+  /** Tiered: three-percentage CCMR raw score. Binary: % met. */
+  ccmrRawScore: number
+  /** Tiered only — count at each tier. Null for binary rows. */
+  foundationalPlus: number | null
+  demonstratedPlus: number | null
+  advanced: number | null
+  /** Binary only — met count. Null for tiered rows. */
+  ccmrMet: number | null
+}
+
+interface RawTieredRow {
+  district_id: string
+  campus_id: string
+  cohort_year: number
+  annual_grads: number
+  foundational_plus: number
+  demonstrated_plus: number
+  advanced_count: number
+  ccmr_raw_score: number
+}
+
+interface RawBinaryRow {
+  district_id: string
+  campus_id: string
+  cohort_year: number
+  annual_grads: number
+  ccmr_met: number
+  ccmr_rate: number
+}
+
+export async function getCohortScores(
+  client: TypedSupabaseClient,
+  districtId: string
+): Promise<CohortScoreRow[]> {
+  const [tieredResult, binaryResult] = await Promise.all([
+    client
+      .from('v_ccmr_score_tiered')
+      .select('district_id, campus_id, cohort_year, annual_grads, foundational_plus, demonstrated_plus, advanced_count, ccmr_raw_score')
+      .eq('district_id', districtId),
+    client
+      .from('v_ccmr_score_binary')
+      .select('district_id, campus_id, cohort_year, annual_grads, ccmr_met, ccmr_rate')
+      .eq('district_id', districtId),
+  ])
+
+  if (tieredResult.error) throw tieredResult.error
+  if (binaryResult.error) throw binaryResult.error
+
+  const tiered = ((tieredResult.data ?? []) as unknown as RawTieredRow[]).map(
+    (r): CohortScoreRow => ({
+      district_id: r.district_id,
+      campus_id: r.campus_id,
+      cohort_year: r.cohort_year,
+      methodology: 'tiered',
+      annualGrads: r.annual_grads ?? 0,
+      ccmrRawScore: Number(r.ccmr_raw_score ?? 0),
+      foundationalPlus: r.foundational_plus ?? 0,
+      demonstratedPlus: r.demonstrated_plus ?? 0,
+      advanced: r.advanced_count ?? 0,
+      ccmrMet: null,
+    })
+  )
+
+  const binary = ((binaryResult.data ?? []) as unknown as RawBinaryRow[]).map(
+    (r): CohortScoreRow => ({
+      district_id: r.district_id,
+      campus_id: r.campus_id,
+      cohort_year: r.cohort_year,
+      methodology: 'binary',
+      annualGrads: r.annual_grads ?? 0,
+      ccmrRawScore: Number(r.ccmr_rate ?? 0),
+      foundationalPlus: null,
+      demonstratedPlus: null,
+      advanced: null,
+      ccmrMet: r.ccmr_met ?? 0,
+    })
+  )
+
+  return [...tiered, ...binary].sort((a, b) => {
+    if (a.cohort_year !== b.cohort_year) return a.cohort_year - b.cohort_year
+    return a.campus_id.localeCompare(b.campus_id)
+  })
+}
+
+// ─────────────────────────────────────────────────────────────────
+// ACTIVE COHORT DISTRIBUTION
+//
+// Counts students by (cohort_year, methodology) for active cohorts.
+// Used to surface the spread of methodologies a district has on its
+// books today, so the dashboard can call out "you have students on
+// both rule sets" before the user is misled by a single number.
+// ─────────────────────────────────────────────────────────────────
+
+export interface ActiveCohortRow {
+  cohort_year: number
+  methodology: MethodologyKey
+  studentCount: number
+}
+
+export async function getActiveCohortDistribution(
+  client: TypedSupabaseClient,
+  districtId: string
+): Promise<ActiveCohortRow[]> {
+  const { data, error } = await client
+    .from('students')
+    .select('cohort_year')
+    .eq('district_id', districtId)
+    .eq('is_active', true)
+    .eq('cohort_status', 'active')
+  if (error) throw error
+  const counts = new Map<number, number>()
+  for (const r of (data ?? []) as { cohort_year: number | null }[]) {
+    if (r.cohort_year == null) continue
+    counts.set(r.cohort_year, (counts.get(r.cohort_year) ?? 0) + 1)
+  }
+  return Array.from(counts.entries())
+    .map(([cohort_year, studentCount]): ActiveCohortRow => ({
+      cohort_year,
+      methodology: cohort_year <= 2029 ? 'tx_binary' : 'tx_tiered_2030',
+      studentCount,
+    }))
+    .sort((a, b) => a.cohort_year - b.cohort_year)
 }
 
 export async function getIndicatorBreakdown(

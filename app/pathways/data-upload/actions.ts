@@ -6,6 +6,8 @@ import { createClient } from "@/utils/supabase/server";
 import { getAuthContext } from "@/lib/db/users";
 import { createUpload, updateUploadStatus } from "@/lib/db/uploads";
 import { computeCCMRReadiness, countCCMRPathways } from "@/lib/ccmr";
+import { recomputeDistrict } from "@/lib/ccmr/recompute";
+import type { TieredDerivationInput } from "@/lib/ccmr/derive-tiered";
 import { generateInterventions } from "@/lib/interventions/generate";
 import type {
   IndicatorType,
@@ -58,6 +60,71 @@ const CURRENT_YEAR = new Date().getFullYear();
 /** Grade 12 → current year, grade 11 → current year + 1, etc. */
 function gradeToGradYear(grade: number): number {
   return CURRENT_YEAR + (12 - grade);
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Tiered derivation input builder — placeholder.
+//
+// CSV ingestion currently produces only legacy ccmr_indicators rows.
+// For tiered cohorts (≥ 2030) we don't yet have SIS or PEIMS feeds
+// for the new fields (CPC course completions, IBC tier, JROTC AFQT,
+// SpEd advanced diploma, workforce-ready IEP, etc.). Until those
+// connectors land, we hand `recomputeStudent` a zero-filled
+// TieredDerivationInput so it returns 'none' for every indicator.
+// The recompute service still snapshots the methodology and writes
+// the student_ccmr_status row — this is the right behavior for
+// pre-SIS state. Real values will flow once the connectors ship.
+// ─────────────────────────────────────────────────────────────────
+
+function emptyTieredInput(): TieredDerivationInput {
+  return {
+    tsi: {
+      rla_via_sat: false,
+      rla_via_act: false,
+      rla_via_tsia: false,
+      rla_via_cpc: false,
+      math_via_sat: false,
+      math_via_act: false,
+      math_via_tsia: false,
+      math_via_cpc: false,
+    },
+    potential_college_credit: {
+      ap_pass_count: 0,
+      ib_pass_count: 0,
+      onramps_credit_hours: 0,
+      dual_credit_hours: 0,
+    },
+    cte: {
+      is_completer: false,
+      ibc_tier: null,
+      has_level_1_certificate: false,
+      has_level_2_certificate: false,
+    },
+    associate_degree: false,
+    military_enlistment: false,
+    sped_advanced_diploma: false,
+    workforce_ready_iep_diploma: false,
+    jrotc: {
+      enrolled: false,
+      afqt_score: null,
+    },
+  };
+}
+
+/**
+ * Resolve the auth user id (for sync_jobs.triggered_by) without
+ * widening the existing getAuthContext signature. Returns null on
+ * any failure — the recompute still runs, just unattributed.
+ */
+async function getTriggeringUserId(
+  supabase: ReturnType<typeof createClient>
+): Promise<string | null> {
+  try {
+    const { data } = await supabase.auth.getUser();
+    return data.user?.id ?? null;
+  } catch {
+    return null;
+  }
 }
 
 type IndicatorInsertRow = {
@@ -559,6 +626,22 @@ export async function importRows(
     completed_at: new Date().toISOString(),
   });
 
+  // ── Phase 10: CCMR recompute ───────────────────────────────────────────────
+  // Refresh student_ccmr_status for active cohorts in this district.
+  // Bulk recompute (one sync_jobs row), not per-student in a loop.
+  // Failures here MUST NOT roll back the import — log and move on.
+  if (imported > 0) {
+    const triggeredBy = await getTriggeringUserId(supabase);
+    try {
+      await recomputeDistrict(queryClient, districtId, {
+        buildTieredInput: async () => emptyTieredInput(),
+        triggeredBy: triggeredBy ?? undefined,
+      });
+    } catch (err) {
+      console.error("[importRows] recomputeDistrict failed:", err);
+    }
+  }
+
   return {
     uploadId: upload.id,
     imported,
@@ -881,6 +964,20 @@ export async function importSatScores(
     error_log: errors.length > 0 ? errors.map((e) => ({ message: e })) : undefined,
     completed_at: new Date().toISOString(),
   });
+
+  // CCMR recompute after the SAT bulk import. Same rules as importRows:
+  // one sync_jobs row, failures don't roll back the import.
+  if (matched > 0) {
+    const triggeredBy = await getTriggeringUserId(supabase);
+    try {
+      await recomputeDistrict(queryClient, districtId, {
+        buildTieredInput: async () => emptyTieredInput(),
+        triggeredBy: triggeredBy ?? undefined,
+      });
+    } catch (err) {
+      console.error("[importSatScores] recomputeDistrict failed:", err);
+    }
+  }
 
   return {
     uploadId: upload.id,

@@ -20,12 +20,15 @@ import {
 } from "lucide-react";
 import { fetchGroupData } from "@/app/pathways/actions";
 import type {
+  ActiveCohortRow,
+  CohortScoreRow,
   DashboardSummary,
   IndicatorCount,
   PathwayMetrics,
   SubgroupFilter,
 } from "@/lib/db/dashboard";
-import type { CampusCCMRSummaryRow, SnapshotRow, IndicatorType } from "@/types/database";
+import type { CampusCCMRSummaryRow, MethodologyKey, SnapshotRow, IndicatorType } from "@/types/database";
+import { isTieredMethodology } from "@/lib/ccmr/methodology";
 
 /* ============================================
    Summit Insights Dashboard
@@ -43,6 +46,8 @@ interface PathwaysDashboardProps {
   initialSnapshots: SnapshotRow[];
   initialIndicators: IndicatorCount[];
   initialPathwayMetrics: PathwayMetrics;
+  initialCohortScores: CohortScoreRow[];
+  initialActiveCohorts: ActiveCohortRow[];
   hasCCMR: boolean;
 }
 
@@ -783,6 +788,224 @@ const CustomFilterPlaceholder = () => {
 };
 
 // ============================================
+// PER-COHORT CCMR SCORES (mixed-methodology safe)
+//
+// Renders cohort_year × campus rows from v_ccmr_score_tiered and
+// v_ccmr_score_binary, with the methodology tagged on every row.
+// We intentionally do NOT compute a blended single % rate across
+// methodologies — see docs/methodology.md, "Per-cohort segmentation
+// rule." Mixed-methodology districts get a banner reinforcing this.
+// ============================================
+
+const METHODOLOGY_LABEL: Record<MethodologyKey, string> = {
+  tx_binary: "Binary",
+  tx_tiered_2030: "Tiered (2030+)",
+};
+
+function methodologyDisplay(key: MethodologyKey | string): string {
+  return METHODOLOGY_LABEL[key as MethodologyKey] ?? String(key);
+}
+
+const CohortMethodologyBanner = ({
+  cohorts,
+}: {
+  cohorts: ActiveCohortRow[];
+}) => {
+  if (cohorts.length === 0) return null;
+  const methodologies = new Set(cohorts.map((c) => c.methodology));
+  if (methodologies.size < 2) return null;
+
+  const totalsByMethodology = new Map<MethodologyKey, number>();
+  for (const c of cohorts) {
+    totalsByMethodology.set(
+      c.methodology,
+      (totalsByMethodology.get(c.methodology) ?? 0) + c.studentCount
+    );
+  }
+
+  return (
+    <div className="bg-info-light border border-info/30 rounded-lg p-4">
+      <div className="flex items-start gap-3">
+        <BookOpen className="w-5 h-5 text-info-dark flex-shrink-0 mt-0.5" />
+        <div className="flex-1">
+          <p className="text-[14px] font-semibold text-info-dark">
+            This district has active cohorts on multiple CCMR methodologies.
+          </p>
+          <p className="text-[13px] text-info-dark/85 mt-1">
+            Per the TEA framework, scores cannot be blended across rule sets.
+            Use the cohort breakdown below to compare each cohort separately.
+          </p>
+          <div className="flex flex-wrap gap-3 mt-2">
+            {Array.from(totalsByMethodology.entries()).map(([m, count]) => (
+              <span
+                key={m}
+                className={cn(
+                  "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] font-medium",
+                  isTieredMethodology(m)
+                    ? "bg-success-light text-success-dark"
+                    : "bg-neutral-100 text-neutral-700"
+                )}
+              >
+                {methodologyDisplay(m)}: {count.toLocaleString()} students
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const ActiveCohortDistribution = ({
+  cohorts,
+}: {
+  cohorts: ActiveCohortRow[];
+}) => {
+  if (cohorts.length === 0) return null;
+  return (
+    <div className="bg-neutral-0 border border-neutral-200 rounded-lg overflow-hidden">
+      <div className="px-6 py-4 border-b border-neutral-200">
+        <h2 className="text-[17px] font-semibold text-neutral-900">
+          Active cohorts on file
+        </h2>
+        <p className="text-[13px] text-neutral-500 mt-0.5">
+          Distribution by graduating class — each cohort is assessed under
+          its own methodology and reported separately.
+        </p>
+      </div>
+      <table className="w-full">
+        <thead>
+          <tr className="bg-neutral-50 border-b border-neutral-200">
+            <th className="text-left text-[12px] font-semibold text-neutral-700 px-4 py-3">
+              Class of
+            </th>
+            <th className="text-left text-[12px] font-semibold text-neutral-700 px-4 py-3">
+              Methodology
+            </th>
+            <th className="text-right text-[12px] font-semibold text-neutral-700 px-4 py-3">
+              Active students
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {cohorts.map((c) => (
+            <tr key={c.cohort_year} className="border-b border-neutral-100 last:border-0">
+              <td className="px-4 py-3 text-[13px] font-medium text-neutral-900">
+                {c.cohort_year}
+              </td>
+              <td className="px-4 py-3">
+                <span
+                  className={cn(
+                    "inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium",
+                    isTieredMethodology(c.methodology)
+                      ? "bg-success-light text-success-dark"
+                      : "bg-neutral-100 text-neutral-700"
+                  )}
+                >
+                  {methodologyDisplay(c.methodology)}
+                </span>
+              </td>
+              <td className="px-4 py-3 text-right text-[13px] text-neutral-700">
+                {c.studentCount.toLocaleString()}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
+const PerCohortScoreTable = ({
+  scores,
+  campusNameById,
+}: {
+  scores: CohortScoreRow[];
+  campusNameById: Map<string, string>;
+}) => {
+  if (scores.length === 0) {
+    return (
+      <div className="bg-neutral-0 border border-neutral-200 rounded-lg p-6">
+        <h2 className="text-[17px] font-semibold text-neutral-900 mb-1">
+          Per-cohort CCMR scores
+        </h2>
+        <p className="text-[13px] text-neutral-500">
+          No graduated cohorts yet. Scores populate after seniors transition to
+          <code className="bg-neutral-100 px-1.5 py-0.5 mx-1 rounded text-[12px] font-mono">cohort_status = &apos;graduated&apos;</code>
+          and the recompute service has run.
+        </p>
+      </div>
+    );
+  }
+  return (
+    <div className="bg-neutral-0 border border-neutral-200 rounded-lg overflow-hidden">
+      <div className="px-6 py-4 border-b border-neutral-200">
+        <h2 className="text-[17px] font-semibold text-neutral-900">
+          Per-cohort CCMR scores
+        </h2>
+        <p className="text-[13px] text-neutral-500 mt-0.5">
+          Graduated cohorts only. Each row reports its methodology — never
+          blended across rule sets.
+        </p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead>
+            <tr className="bg-neutral-50 border-b border-neutral-200">
+              <th className="text-left text-[12px] font-semibold text-neutral-700 px-4 py-3">Class of</th>
+              <th className="text-left text-[12px] font-semibold text-neutral-700 px-4 py-3">Campus</th>
+              <th className="text-left text-[12px] font-semibold text-neutral-700 px-4 py-3">Methodology</th>
+              <th className="text-right text-[12px] font-semibold text-neutral-700 px-4 py-3">Annual grads</th>
+              <th className="text-right text-[12px] font-semibold text-neutral-700 px-4 py-3">Score</th>
+              <th className="text-left text-[12px] font-semibold text-neutral-700 px-4 py-3">Tier breakdown</th>
+            </tr>
+          </thead>
+          <tbody>
+            {scores.map((row, idx) => (
+              <tr key={`${row.cohort_year}-${row.campus_id}-${idx}`} className="border-b border-neutral-100 last:border-0">
+                <td className="px-4 py-3 text-[13px] font-medium text-neutral-900">
+                  {row.cohort_year}
+                </td>
+                <td className="px-4 py-3 text-[13px] text-neutral-700">
+                  {campusNameById.get(row.campus_id) ?? "—"}
+                </td>
+                <td className="px-4 py-3">
+                  <span
+                    className={cn(
+                      "inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium",
+                      row.methodology === "tiered"
+                        ? "bg-success-light text-success-dark"
+                        : "bg-neutral-100 text-neutral-700"
+                    )}
+                  >
+                    {row.methodology === "tiered" ? "Tiered (2030+)" : "Binary"}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-right text-[13px] text-neutral-700">
+                  {row.annualGrads.toLocaleString()}
+                </td>
+                <td className="px-4 py-3 text-right text-[13px] font-semibold text-neutral-900">
+                  {row.ccmrRawScore.toFixed(1)}%
+                </td>
+                <td className="px-4 py-3 text-[12px] text-neutral-600">
+                  {row.methodology === "tiered" ? (
+                    <span>
+                      F+ {row.foundationalPlus} · D+ {row.demonstratedPlus} · A {row.advanced}
+                    </span>
+                  ) : (
+                    <span>Met {row.ccmrMet}</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+// ============================================
 // MAIN DASHBOARD COMPONENT
 // ============================================
 
@@ -793,6 +1016,8 @@ export const PathwaysDashboard = ({
   initialSnapshots,
   initialIndicators,
   initialPathwayMetrics,
+  initialCohortScores,
+  initialActiveCohorts,
   hasCCMR,
 }: PathwaysDashboardProps) => {
   const [studentGroup, setStudentGroup] = React.useState<StudentGroup>("all");
@@ -1043,6 +1268,20 @@ export const PathwaysDashboard = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Per-cohort CCMR scores — never blended across methodologies */}
+      {hasCCMR && (
+        <>
+          <CohortMethodologyBanner cohorts={initialActiveCohorts} />
+          <ActiveCohortDistribution cohorts={initialActiveCohorts} />
+          <PerCohortScoreTable
+            scores={initialCohortScores}
+            campusNameById={
+              new Map(campusSummaries.map((c) => [c.campus_id, c.campus_name]))
+            }
+          />
+        </>
       )}
 
       {/* Year Over Year Trend */}

@@ -16,7 +16,17 @@ import {
   Award,
 } from "lucide-react";
 import { fetchStudentPage, type StudentFilters, type StudentPathwayEntry } from "@/app/pathways/students/actions";
-import type { CampusRow, CCMRReadiness, IndicatorRow, IndicatorType, StudentRow } from "@/types/database";
+import type {
+  CampusRow,
+  CCMRReadiness,
+  CcmrIndicatorResultStatus,
+  IndicatorCategory,
+  IndicatorRow,
+  IndicatorType,
+  MethodologyKey,
+} from "@/types/database";
+import type { EnrichedStudentRow } from "@/lib/db/students";
+import { isTieredMethodology } from "@/lib/ccmr/methodology";
 import type { CareerClusterOption } from "@/app/pathways/students/page";
 
 /* ============================================
@@ -88,6 +98,107 @@ const StatusBadge = ({ status }: { status: CCMRReadiness }) => {
       {label}
     </span>
   );
+};
+
+// ============================================
+// METHODOLOGY BADGE — small, low visual weight
+//
+// Not rendered in the caseload table by design — the methodology
+// is implicit in the CCMR status badge (Foundational/Demonstrated/
+// Advanced is unmistakably tiered; Met/Almost/At-risk is binary).
+// Exported here for the student profile page (file 2), which uses
+// it as an explicit context label on a single-student view.
+// ============================================
+
+function methodologyLabel(key: MethodologyKey | null): string {
+  if (!key) return "—";
+  if (key === "tx_binary") return "Binary";
+  if (key === "tx_tiered_2030") return "Tiered (2030+)";
+  // Future methodologies (e.g. tx_weighted_2033) — render the raw key
+  // until the team adds a friendlier label here.
+  return key;
+}
+
+export const MethodologyBadge = ({ methodologyKey }: { methodologyKey: MethodologyKey | null }) => {
+  if (!methodologyKey) {
+    return <span className="text-[11px] text-neutral-400">—</span>;
+  }
+  const tiered = isTieredMethodology(methodologyKey);
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium",
+        tiered
+          ? "bg-primary-50 text-primary-700"
+          : "bg-neutral-100 text-neutral-600"
+      )}
+    >
+      {methodologyLabel(methodologyKey)}
+    </span>
+  );
+};
+
+// ============================================
+// CCMR BADGE — methodology-aware
+//
+// Binary cohorts: existing met/on_track/almost/at_risk/too_early
+//   treatment driven by ccmr_readiness.
+// Tiered cohorts: Foundational / Demonstrated / Advanced / None
+//   driven by highest_level + highest_level_category.
+// ============================================
+
+function categoryLabel(category: IndicatorCategory): string {
+  return category.charAt(0).toUpperCase() + category.slice(1);
+}
+
+const TIERED_CONFIG: Record<
+  Exclude<CcmrIndicatorResultStatus, "met" | "not_met">,
+  { label: string; className: string }
+> = {
+  none: { label: "None", className: "bg-neutral-100 text-neutral-500" },
+  foundational: { label: "Foundational", className: "bg-success-light text-success-dark" },
+  demonstrated: { label: "Demonstrated", className: "bg-success text-neutral-0" },
+  advanced: { label: "Advanced", className: "bg-success-dark text-neutral-0" },
+};
+
+const TieredBadge = ({
+  level,
+  category,
+}: {
+  level: CcmrIndicatorResultStatus | null;
+  category: IndicatorCategory | null;
+}) => {
+  // Binary statuses ('met' / 'not_met') aren't valid here — caller
+  // should have routed those to <StatusBadge>. Defensive fallback:
+  if (!level || level === "met" || level === "not_met") {
+    const { label, className } = TIERED_CONFIG.none;
+    return (
+      <span className={cn("inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-medium", className)}>
+        {label}
+      </span>
+    );
+  }
+  const { label, className } = TIERED_CONFIG[level];
+  return (
+    <span className={cn("inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-medium", className)}>
+      {label}
+      {category && (
+        <span className="ml-1 opacity-80">({categoryLabel(category)})</span>
+      )}
+    </span>
+  );
+};
+
+const MethodologyAwareCcmrBadge = ({ student }: { student: EnrichedStudentRow }) => {
+  if (isTieredMethodology(student.methodology_key)) {
+    return (
+      <TieredBadge
+        level={student.highest_level}
+        category={student.highest_level_category}
+      />
+    );
+  }
+  return <StatusBadge status={student.ccmr_readiness} />;
 };
 
 // ============================================
@@ -339,7 +450,7 @@ const FilterBar = ({ campuses, careerClusters, filters, onChange, hasCCMR }: Fil
 // ============================================
 
 interface StudentTableProps {
-  students: StudentRow[];
+  students: EnrichedStudentRow[];
   count: number;
   indicators: IndicatorRow[];
   pathways: StudentPathwayEntry[];
@@ -395,6 +506,7 @@ const StudentTable = ({
             <tr className="bg-neutral-50 border-b border-neutral-200">
               <th className="text-left text-[12px] font-semibold text-neutral-700 px-4 py-3">Student</th>
               <th className="text-left text-[12px] font-semibold text-neutral-700 px-4 py-3">Campus</th>
+              <th className="text-center text-[12px] font-semibold text-neutral-700 px-4 py-3">Cohort</th>
               <th className="text-center text-[12px] font-semibold text-neutral-700 px-4 py-3">Grade</th>
               {hasCCMR && <th className="text-left text-[12px] font-semibold text-neutral-700 px-4 py-3">CCMR status</th>}
               {hasCCMR && <th className="text-left text-[12px] font-semibold text-neutral-700 px-4 py-3">Indicators met</th>}
@@ -408,7 +520,7 @@ const StudentTable = ({
           <tbody>
             {students.length === 0 ? (
               <tr>
-                <td colSpan={hasCCMR ? 10 : 8} className="px-4 py-10 text-center text-[13px] text-neutral-500">
+                <td colSpan={hasCCMR ? 11 : 9} className="px-4 py-10 text-center text-[13px] text-neutral-500">
                   No students match the current filters.
                 </td>
               </tr>
@@ -472,13 +584,17 @@ const StudentTable = ({
                       {campusById.get(student.campus_id) ?? "—"}
                     </td>
 
+                    <td className="px-4 py-4 text-center text-[13px] text-neutral-700">
+                      {student.cohort_year ?? <span className="text-neutral-400">—</span>}
+                    </td>
+
                     <td className="px-4 py-4 text-center text-[13px] font-medium text-neutral-900">
                       {student.grade_level}
                     </td>
 
                     {hasCCMR && (
                       <td className="px-4 py-4">
-                        <StatusBadge status={student.ccmr_readiness} />
+                        <MethodologyAwareCcmrBadge student={student} />
                       </td>
                     )}
 
@@ -610,7 +726,7 @@ const StudentTable = ({
 
 interface PathwaysStudentsProps {
   districtId: string;
-  initialStudents: StudentRow[];
+  initialStudents: EnrichedStudentRow[];
   initialCount: number;
   initialIndicators: IndicatorRow[];
   initialPathways: StudentPathwayEntry[];

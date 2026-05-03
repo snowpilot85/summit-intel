@@ -6,7 +6,13 @@ import { PathwaysAppShell } from "@/components/pathways/app-shell";
 import { PathwaysDashboard } from "@/components/pathways/dashboard";
 import { DistrictPicker } from "@/components/pathways/district-picker";
 import { PageHeader } from "@/components/layout/page-header";
-import { getDashboardSummary, getIndicatorBreakdown, getPathwayMetrics } from "@/lib/db/dashboard";
+import {
+  getActiveCohortDistribution,
+  getCohortScores,
+  getDashboardSummary,
+  getIndicatorBreakdown,
+  getPathwayMetrics,
+} from "@/lib/db/dashboard";
 import { getCampusSummaries } from "@/lib/db/campuses";
 import { getAnnualSnapshots } from "@/lib/db/snapshots";
 import { getUserContext } from "@/lib/db/users";
@@ -42,12 +48,22 @@ export default async function PathwaysDashboardPage() {
   // super_admin → bypass RLS with admin client
   const queryClient = isSuperAdmin ? createAdminClient() : supabase;
 
-  const [summary, campusSummaries, snapshots, indicators, pathwayMetrics] = await Promise.all([
+  const [
+    summary,
+    campusSummaries,
+    snapshots,
+    indicators,
+    pathwayMetrics,
+    cohortScores,
+    activeCohorts,
+  ] = await Promise.all([
     getDashboardSummary(queryClient, districtId, "all"),
     getCampusSummaries(queryClient, districtId),
     getAnnualSnapshots(queryClient, districtId),
     getIndicatorBreakdown(queryClient, districtId),
     getPathwayMetrics(queryClient, districtId, "all"),
+    getCohortScores(queryClient, districtId),
+    getActiveCohortDistribution(queryClient, districtId),
   ]);
 
   return (
@@ -70,6 +86,8 @@ export default async function PathwaysDashboardPage() {
           initialSnapshots={snapshots}
           initialIndicators={indicators}
           initialPathwayMetrics={pathwayMetrics}
+          initialCohortScores={cohortScores}
+          initialActiveCohorts={activeCohorts}
           hasCCMR={userCtx.hasCCMR}
         />
       </PathwaysAppShell>
