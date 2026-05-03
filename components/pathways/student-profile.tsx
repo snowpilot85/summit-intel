@@ -34,6 +34,10 @@ import {
 } from "@/lib/ccmr-rules";
 import type {
   CCMRReadiness,
+  CcmrIndicatorResultRow,
+  CcmrIndicatorResultStatus,
+  CcmrIndicatorResultType,
+  IndicatorCategory,
   IndicatorRow,
   IndicatorType,
   InterventionRow,
@@ -41,6 +45,9 @@ import type {
   StudentRow,
   WorkBasedLearningRow,
 } from "@/types/database";
+import type { EnrichedStudentRow } from "@/lib/db/students";
+import { isTieredMethodology } from "@/lib/ccmr/methodology";
+import { MethodologyBadge } from "@/components/pathways/students";
 import type { CredentialProgressItem } from "@/app/pathways/students/[id]/page";
 
 /* ============================================
@@ -211,6 +218,80 @@ const ReadinessBadgeLarge = ({ status }: { status: CCMRReadiness }) => {
 };
 
 // ============================================
+// TIERED CCMR — large badge + small per-indicator badge
+//
+// The visual color ramp matches the caseload TieredBadge but at
+// header-card scale. Category is shown next to the level so the
+// reader sees both "what tier" and "what drove it" at a glance.
+// ============================================
+
+type TieredOnlyStatus = "foundational" | "demonstrated" | "advanced" | "none";
+
+const TIERED_CONFIG_LARGE: Record<TieredOnlyStatus, { label: string; className: string }> = {
+  none: { label: "None", className: "bg-neutral-400 text-neutral-0" },
+  foundational: { label: "Foundational", className: "bg-success-light text-success-dark" },
+  demonstrated: { label: "Demonstrated", className: "bg-success text-neutral-0" },
+  advanced: { label: "Advanced", className: "bg-success-dark text-neutral-0" },
+};
+
+function categoryLabel(category: IndicatorCategory): string {
+  return category.charAt(0).toUpperCase() + category.slice(1);
+}
+
+function asTieredStatus(s: CcmrIndicatorResultStatus | null): TieredOnlyStatus {
+  if (s === "foundational" || s === "demonstrated" || s === "advanced") return s;
+  return "none";
+}
+
+const TieredBadgeLarge = ({
+  level,
+  category,
+}: {
+  level: CcmrIndicatorResultStatus | null;
+  category: IndicatorCategory | null;
+}) => {
+  const tier = asTieredStatus(level);
+  const { label, className } = TIERED_CONFIG_LARGE[tier];
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[14px] font-bold uppercase tracking-wide",
+        className
+      )}
+    >
+      {label}
+      {category && tier !== "none" && (
+        <span className="text-[11px] font-semibold opacity-90 normal-case tracking-normal">
+          ({categoryLabel(category)})
+        </span>
+      )}
+    </span>
+  );
+};
+
+// Compact tier pill used inside the indicator grid row.
+const TIERED_CONFIG_PILL: Record<TieredOnlyStatus, string> = {
+  none: "bg-neutral-100 text-neutral-500",
+  foundational: "bg-success-light text-success-dark",
+  demonstrated: "bg-success text-neutral-0",
+  advanced: "bg-success-dark text-neutral-0",
+};
+
+const TierPill = ({ status }: { status: CcmrIndicatorResultStatus | null }) => {
+  const tier = asTieredStatus(status);
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium",
+        TIERED_CONFIG_PILL[tier]
+      )}
+    >
+      {TIERED_CONFIG_LARGE[tier].label}
+    </span>
+  );
+};
+
+// ============================================
 // INDICATOR STATUS ICON
 // ============================================
 
@@ -246,7 +327,7 @@ const INDICATOR_STATUS_COLOR: Record<string, string> = {
 // ============================================
 
 interface StudentHeaderProps {
-  student: StudentRow;
+  student: EnrichedStudentRow;
   campusName: string;
   graduationDate: string | null;
   hasCCMR: boolean;
@@ -342,18 +423,50 @@ const StudentHeader = ({ student, campusName, graduationDate, hasCCMR, pathway }
           <div className="flex-shrink-0 flex flex-col items-end gap-2">
             {hasCCMR ? (
               <>
-                <ReadinessBadgeLarge status={student.ccmr_readiness} />
-                <p className="text-[12px] text-neutral-500">
-                  {student.indicators_met_count} indicator{student.indicators_met_count !== 1 ? "s" : ""} met
-                </p>
-                <Link
-                  href="/pathways/ccmr-rules"
-                  target="_blank"
-                  className="inline-flex items-center gap-1 text-[11px] text-neutral-400 hover:text-primary-600 transition-colors"
-                >
-                  How CCMR is calculated
-                  <ExternalLink className="w-3 h-3" />
-                </Link>
+                {isTieredMethodology(student.methodology_key) ? (
+                  <>
+                    <TieredBadgeLarge
+                      level={student.highest_level}
+                      category={student.highest_level_category}
+                    />
+                    <div className="flex items-center gap-2">
+                      <MethodologyBadge methodologyKey={student.methodology_key} />
+                      {student.is_fallback_status && (
+                        <span className="text-[11px] text-warning-dark" title="No student_ccmr_status row yet — value derived from binary readiness">
+                          (pending recompute)
+                        </span>
+                      )}
+                    </div>
+                    {student.cohort_year != null && (
+                      <p className="text-[12px] text-neutral-500 text-right max-w-[280px]">
+                        Class of {student.cohort_year} — assessed under TEA&apos;s tiered CCMR methodology (Foundational / Demonstrated / Advanced).
+                      </p>
+                    )}
+                    <Link
+                      href="/pathways/ccmr-rules"
+                      target="_blank"
+                      className="inline-flex items-center gap-1 text-[11px] text-neutral-400 hover:text-primary-600 transition-colors"
+                    >
+                      How CCMR is calculated
+                      <ExternalLink className="w-3 h-3" />
+                    </Link>
+                  </>
+                ) : (
+                  <>
+                    <ReadinessBadgeLarge status={student.ccmr_readiness} />
+                    <p className="text-[12px] text-neutral-500">
+                      {student.indicators_met_count} indicator{student.indicators_met_count !== 1 ? "s" : ""} met
+                    </p>
+                    <Link
+                      href="/pathways/ccmr-rules"
+                      target="_blank"
+                      className="inline-flex items-center gap-1 text-[11px] text-neutral-400 hover:text-primary-600 transition-colors"
+                    >
+                      How CCMR is calculated
+                      <ExternalLink className="w-3 h-3" />
+                    </Link>
+                  </>
+                )}
               </>
             ) : (
               <>
@@ -675,6 +788,152 @@ const CCMRIndicatorGrid = ({ indicators }: { indicators: IndicatorRow[] }) => {
           onClose={() => setSelectedType(null)}
         />
       )}
+    </div>
+  );
+};
+
+// ============================================
+// TIERED INDICATOR GRID (cohort 2030+)
+//
+// Renders one row per ccmr_indicator_results record. The row whose
+// id matches student.highest_level_source_indicator_id is flagged
+// with an "Highest level" marker — the score-driving indicator
+// that wins the highest-tier resolution. Empty data set → empty
+// state explaining that recompute hasn't run yet.
+// ============================================
+
+const TIERED_INDICATOR_LABELS: Record<CcmrIndicatorResultType, string> = {
+  tsi: "TSI (Math + RLA)",
+  ibc: "Industry-Based Certification",
+  level_1_certificate: "Level I Certificate",
+  level_2_certificate: "Level II Certificate",
+  dual_credit: "Dual Credit",
+  ap: "AP Exam",
+  ib: "IB Exam",
+  onramps: "OnRamps",
+  associate_degree: "Associate Degree",
+  jrotc: "JROTC + AFQT",
+  military_enlistment: "Military Enlistment",
+  sped_advanced_diploma: "SpEd Advanced Diploma",
+  workforce_ready_iep: "Workforce Ready IEP Diploma",
+};
+
+const CATEGORY_LABEL: Record<IndicatorCategory, string> = {
+  college: "College",
+  career: "Career",
+  military: "Military",
+};
+
+function summarizeSource(row: CcmrIndicatorResultRow): string {
+  const sd = row.source_data ?? {};
+  const parts: string[] = [];
+  if (typeof sd.tsi_pathway_source === "string") {
+    parts.push(`Pathway: ${String(sd.tsi_pathway_source).toUpperCase()}`);
+  }
+  if (typeof sd.ibc_tier === "number") parts.push(`Tier ${sd.ibc_tier}`);
+  if (typeof sd.certificate_program === "string") parts.push(String(sd.certificate_program));
+  if (typeof sd.afqt_score === "number") parts.push(`AFQT ${sd.afqt_score}`);
+  return parts.join(" · ") || "—";
+}
+
+const TieredIndicatorGrid = ({
+  results,
+  highestSourceIndicatorId,
+}: {
+  results: CcmrIndicatorResultRow[];
+  highestSourceIndicatorId: string | null;
+}) => {
+  if (results.length === 0) {
+    return (
+      <div className="bg-neutral-0 border border-neutral-200 rounded-lg p-6">
+        <h2 className="text-[18px] font-semibold text-neutral-900 mb-2">CCMR indicators</h2>
+        <p className="text-[13px] text-neutral-500">
+          Per-indicator tier results have not been computed yet for this student.
+          Run <code className="bg-neutral-100 px-1.5 py-0.5 rounded text-[12px] font-mono">recomputeDistrict</code> to populate.
+        </p>
+      </div>
+    );
+  }
+
+  // Group by category for parity with the binary grid layout.
+  const byCategory: Record<IndicatorCategory, CcmrIndicatorResultRow[]> = {
+    college: [],
+    career: [],
+    military: [],
+  };
+  for (const r of results) {
+    byCategory[r.indicator_category].push(r);
+  }
+  const categoryOrder: IndicatorCategory[] = ["college", "career", "military"];
+
+  return (
+    <div className="bg-neutral-0 border border-neutral-200 rounded-lg p-6">
+      <div className="flex items-center justify-between mb-5">
+        <h2 className="text-[18px] font-semibold text-neutral-900">CCMR indicators</h2>
+        <span className="text-[12px] text-neutral-400">
+          Tiered methodology — highest level wins
+        </span>
+      </div>
+
+      <div className="space-y-6">
+        {categoryOrder.map((category) => {
+          const rows = byCategory[category];
+          if (rows.length === 0) return null;
+          return (
+            <div key={category}>
+              <div className="flex items-center gap-2 mb-3">
+                <Layers className="w-4 h-4 text-neutral-400" />
+                <h3 className="text-[12px] font-semibold text-neutral-500 uppercase tracking-wide">
+                  {CATEGORY_LABEL[category]}
+                </h3>
+              </div>
+              <div className="border border-neutral-200 rounded-lg overflow-x-auto">
+                <table className="w-full min-w-[480px]">
+                  <tbody>
+                    {rows.map((row, idx) => {
+                      const isHighest = row.id === highestSourceIndicatorId;
+                      return (
+                        <tr
+                          key={row.id}
+                          className={cn(
+                            "border-b border-neutral-100 last:border-0 transition-colors",
+                            isHighest
+                              ? "bg-success-light/30"
+                              : idx % 2 === 1
+                                ? "bg-neutral-50/40"
+                                : ""
+                          )}
+                        >
+                          <td className="px-4 py-3 text-[13px] text-neutral-900 w-[220px]">
+                            <div className="flex items-center gap-2">
+                              {TIERED_INDICATOR_LABELS[row.indicator_type] ?? row.indicator_type}
+                              {isHighest && (
+                                <span
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-success-dark text-neutral-0 text-[10px] font-semibold uppercase tracking-wide"
+                                  title="This indicator drives the student's highest level"
+                                >
+                                  <Award className="w-3 h-3" />
+                                  Highest level
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 w-[140px]">
+                            <TierPill status={row.status} />
+                          </td>
+                          <td className="px-4 py-3 text-[12px] text-neutral-500">
+                            {summarizeSource(row)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 };
@@ -1322,8 +1581,10 @@ const WorkBasedLearningSection = ({
 // ============================================
 
 export interface StudentProfileProps {
-  student: StudentRow;
+  student: EnrichedStudentRow;
   indicators: IndicatorRow[];
+  /** Per-indicator tier results — populated for tiered cohorts after recompute runs. */
+  tieredIndicatorResults?: CcmrIndicatorResultRow[];
   interventions: InterventionRow[];
   campusName: string;
   graduationDate: string | null;
@@ -1337,6 +1598,7 @@ export interface StudentProfileProps {
 export const PathwaysStudentProfile = ({
   student,
   indicators,
+  tieredIndicatorResults = [],
   interventions,
   campusName,
   graduationDate,
@@ -1378,7 +1640,15 @@ export const PathwaysStudentProfile = ({
           <CareerPathwaySection pathway={pathway ?? null} />
           <CredentialProgressSection items={credentialProgress} />
           <WorkBasedLearningSection records={wblRecords} />
-          {hasCCMR && <CCMRIndicatorGrid indicators={indicators} />}
+          {hasCCMR &&
+            (isTieredMethodology(student.methodology_key) ? (
+              <TieredIndicatorGrid
+                results={tieredIndicatorResults}
+                highestSourceIndicatorId={student.highest_level_source_indicator_id}
+              />
+            ) : (
+              <CCMRIndicatorGrid indicators={indicators} />
+            ))}
         </div>
 
         {/* Right: Nearest paths + interventions + metadata */}
