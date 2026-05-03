@@ -25,9 +25,16 @@ import {
   updateInterventionNotes,
   refreshRecommendations,
 } from "@/app/pathways/interventions/actions";
+import {
+  computeLeverage,
+  formatLeverage,
+  indexIndicatorsByStudent,
+  type Leverage,
+} from "@/lib/interventions/leverage";
 import type {
   CampusRow,
   CCMRReadiness,
+  IndicatorRow,
   InterventionRow,
   InterventionStatus,
   StudentRow,
@@ -86,6 +93,7 @@ function formatShortDate(dateStr: string): string {
 // ============================================
 
 type PathwayFilter = "all" | "ibc" | "college_prep" | "tsi";
+type SortMode = "pathway" | "leverage";
 
 interface Filters {
   campusId: string;
@@ -225,14 +233,14 @@ const FilterBar = ({
   const set = (partial: Partial<Filters>) => onChange({ ...filters, ...partial });
 
   return (
-    <div className="bg-neutral-0 border border-neutral-200 rounded-lg p-4">
-      <div className="flex flex-wrap items-center gap-3">
+    <div className="bg-neutral-0 border border-neutral-200 rounded-lg p-3 sm:p-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-center gap-2 sm:gap-3">
         {/* Campus */}
-        <div className="relative">
+        <div className="relative w-full lg:w-auto">
           <select
             value={filters.campusId}
             onChange={(e) => set({ campusId: e.target.value })}
-            className="appearance-none bg-neutral-0 border border-neutral-200 rounded-md px-3 py-2 pr-8 text-[13px] font-medium text-neutral-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
+            className="appearance-none w-full lg:w-auto bg-neutral-0 border border-neutral-200 rounded-md px-3 py-2 pr-8 text-[13px] font-medium text-neutral-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
           >
             <option value="">All campuses</option>
             {campuses.map((c) => (
@@ -243,11 +251,11 @@ const FilterBar = ({
         </div>
 
         {/* Pathway type */}
-        <div className="relative">
+        <div className="relative w-full lg:w-auto">
           <select
             value={filters.pathway}
             onChange={(e) => set({ pathway: e.target.value as PathwayFilter })}
-            className="appearance-none bg-neutral-0 border border-neutral-200 rounded-md px-3 py-2 pr-8 text-[13px] font-medium text-neutral-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
+            className="appearance-none w-full lg:w-auto bg-neutral-0 border border-neutral-200 rounded-md px-3 py-2 pr-8 text-[13px] font-medium text-neutral-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
           >
             <option value="all">All pathways</option>
             <option value="ibc">IBC</option>
@@ -258,11 +266,11 @@ const FilterBar = ({
         </div>
 
         {/* Status */}
-        <div className="relative">
+        <div className="relative w-full lg:w-auto">
           <select
             value={filters.status}
             onChange={(e) => set({ status: e.target.value as InterventionStatus | "all" })}
-            className="appearance-none bg-neutral-0 border border-neutral-200 rounded-md px-3 py-2 pr-8 text-[13px] font-medium text-neutral-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
+            className="appearance-none w-full lg:w-auto bg-neutral-0 border border-neutral-200 rounded-md px-3 py-2 pr-8 text-[13px] font-medium text-neutral-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
           >
             <option value="all">All statuses</option>
             <option value="recommended">Recommended</option>
@@ -273,7 +281,7 @@ const FilterBar = ({
         </div>
 
         {/* Search */}
-        <div className="relative flex-1 min-w-[200px]">
+        <div className="relative w-full lg:flex-1 lg:min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
           <input
             type="text"
@@ -288,7 +296,7 @@ const FilterBar = ({
         <button
           onClick={onToggleDismissed}
           className={cn(
-            "flex items-center gap-1.5 px-3 py-2 rounded-md border text-[13px] font-medium transition-colors",
+            "flex items-center justify-center gap-1.5 px-3 py-2 rounded-md border text-[13px] font-medium transition-colors w-full lg:w-auto",
             showDismissed
               ? "bg-neutral-100 border-neutral-300 text-neutral-700"
               : "border-neutral-200 text-neutral-500 hover:border-neutral-300 hover:text-neutral-700"
@@ -505,6 +513,7 @@ interface InterventionCardProps {
   intervention: InterventionRow;
   student: StudentRow;
   campusName: string;
+  leverage: Leverage | null;
   onStatusChange: (id: string, newStatus: InterventionStatus) => void;
   onNotesSaved: (id: string, notes: string) => void;
   isPending: boolean;
@@ -514,6 +523,7 @@ const InterventionCard = ({
   intervention,
   student,
   campusName,
+  leverage,
   onStatusChange,
   onNotesSaved,
   isPending,
@@ -530,12 +540,12 @@ const InterventionCard = ({
   return (
     <div
       className={cn(
-        "bg-neutral-0 border rounded-lg p-4 transition-opacity",
+        "bg-neutral-0 border rounded-lg p-3 sm:p-4 transition-opacity",
         isDismissed ? "border-neutral-200 opacity-60" : "border-neutral-200",
         isOverdue && !isDismissed && "border-l-4 border-l-error"
       )}
     >
-      {/* Card header */}
+      {/* Card header — stacks on mobile, side-by-side on sm+ */}
       <div className="flex items-start gap-3">
         {/* Avatar */}
         <Link href={`/pathways/students/${student.id}?from=interventions`} className="flex-shrink-0">
@@ -546,7 +556,7 @@ const InterventionCard = ({
 
         {/* Student info */}
         <div className="flex-1 min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <Link
               href={`/pathways/students/${student.id}?from=interventions`}
               className="text-[14px] font-semibold text-neutral-900 hover:text-teal-700 transition-colors"
@@ -556,7 +566,7 @@ const InterventionCard = ({
             <CCMRBadge readiness={student.ccmr_readiness} />
             <StatusPill status={intervention.status} />
           </div>
-          <div className="flex flex-wrap items-center gap-2 mt-0.5">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
             <span className="text-[12px] text-neutral-500">{campusName}</span>
             {pathwayLabel && (
               <>
@@ -570,46 +580,56 @@ const InterventionCard = ({
         </div>
 
         {/* Due date + priority */}
-        <div className="flex-shrink-0 text-right">
-          {intervention.due_date && (
-            <div className="flex items-center gap-1 justify-end">
-              {isUrgent && (
-                <CalendarClock
-                  className={cn(
-                    "w-3.5 h-3.5",
-                    isOverdue ? "text-error" : "text-warning-dark"
-                  )}
-                />
-              )}
-              <span
-                className={cn(
-                  "text-[12px] font-medium",
-                  isOverdue
-                    ? "text-error"
-                    : isUrgent
-                    ? "text-warning-dark"
-                    : "text-neutral-500"
+        {(intervention.due_date || intervention.priority) && (
+          <div className="flex-shrink-0 text-right">
+            {intervention.due_date && (
+              <div className="flex items-center gap-1 justify-end">
+                {isUrgent && (
+                  <CalendarClock
+                    className={cn(
+                      "w-3.5 h-3.5",
+                      isOverdue ? "text-error" : "text-warning-dark"
+                    )}
+                  />
                 )}
-              >
-                {isOverdue
-                  ? `${Math.abs(days!)}d overdue`
-                  : `Due ${formatShortDate(intervention.due_date)}`}
+                <span
+                  className={cn(
+                    "text-[12px] font-medium whitespace-nowrap",
+                    isOverdue
+                      ? "text-error"
+                      : isUrgent
+                      ? "text-warning-dark"
+                      : "text-neutral-500"
+                  )}
+                >
+                  {isOverdue
+                    ? `${Math.abs(days!)}d overdue`
+                    : `Due ${formatShortDate(intervention.due_date)}`}
+                </span>
+              </div>
+            )}
+            {intervention.priority && (
+              <span className="text-[11px] text-neutral-400">
+                Priority {intervention.priority}
               </span>
-            </div>
-          )}
-          {intervention.priority && (
-            <span className="text-[11px] text-neutral-400">
-              Priority {intervention.priority}
-            </span>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Intervention content */}
-      <div className="mt-3 pl-12">
+      {/* Intervention content. Indent under avatar on sm+, full width on mobile. */}
+      <div className="mt-3 sm:pl-12">
         <p className="text-[13px] font-medium text-neutral-900">{intervention.title}</p>
+
+        {/* Distance to threshold — always below title row when present */}
+        {leverage && (
+          <p className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium text-teal-700 bg-teal-50 border border-teal-200 rounded px-1.5 py-0.5">
+            {formatLeverage(leverage)}
+          </p>
+        )}
+
         {intervention.description && (
-          <p className="text-[12px] text-neutral-500 mt-0.5 leading-relaxed">
+          <p className="text-[12px] text-neutral-500 mt-1 leading-relaxed">
             {intervention.description}
           </p>
         )}
@@ -625,7 +645,7 @@ const InterventionCard = ({
 
         {/* Action buttons */}
         {!isDismissed && (
-          <div className="flex items-center justify-between mt-3 pt-3 border-t border-neutral-100">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mt-3 pt-3 border-t border-neutral-100">
             <Link
               href={`/pathways/students/${student.id}?from=interventions`}
               className="text-[12px] font-medium text-primary-500 hover:text-primary-600 transition-colors"
@@ -649,7 +669,12 @@ const InterventionCard = ({
 // ============================================
 
 interface InterventionListProps {
-  rows: { intervention: InterventionRow; student: StudentRow; campusName: string }[];
+  rows: {
+    intervention: InterventionRow;
+    student: StudentRow;
+    campusName: string;
+    leverage: Leverage | null;
+  }[];
   onStatusChange: (id: string, newStatus: InterventionStatus) => void;
   onNotesSaved: (id: string, notes: string) => void;
   isPending: boolean;
@@ -683,12 +708,13 @@ const InterventionList = ({
 
   return (
     <div className="space-y-3">
-      {pageRows.map(({ intervention, student, campusName }) => (
+      {pageRows.map(({ intervention, student, campusName, leverage }) => (
         <InterventionCard
           key={intervention.id}
           intervention={intervention}
           student={student}
           campusName={campusName}
+          leverage={leverage}
           onStatusChange={onStatusChange}
           onNotesSaved={onNotesSaved}
           isPending={isPending}
@@ -738,6 +764,7 @@ export interface InterventionsPageProps {
   interventions: InterventionRow[];
   students: StudentRow[];
   campuses: CampusRow[];
+  indicators: IndicatorRow[];
   seniorCount: number;
   hasCCMR: boolean;
 }
@@ -801,12 +828,14 @@ export const InterventionsPage = ({
   interventions: initialInterventions,
   students,
   campuses,
+  indicators,
   seniorCount,
   hasCCMR,
 }: InterventionsPageProps) => {
   const [interventions, setInterventions] = React.useState(initialInterventions);
   const [showDismissed, setShowDismissed] = React.useState(false);
   const [pathwayFilter, setPathwayFilter] = React.useState<PathwayFilter>("all");
+  const [sortMode, setSortMode] = React.useState<SortMode>("pathway");
   const [filters, setFilters] = React.useState<Filters>({
     campusId: "",
     pathway: "all",
@@ -816,6 +845,11 @@ export const InterventionsPage = ({
   const [isRefreshing, setIsRefreshing] = React.useState(false);
   const [refreshMsg, setRefreshMsg] = React.useState<string | null>(null);
   const [isPending, startTransition] = React.useTransition();
+
+  const indicatorsByStudent = React.useMemo(
+    () => indexIndicatorsByStudent(indicators),
+    [indicators]
+  );
 
   const handlePathwayCard = (p: PathwayFilter) => {
     setPathwayFilter(p);
@@ -880,23 +914,41 @@ export const InterventionsPage = ({
 
         return true;
       })
-      .sort((a, b) => {
-        // Dismissed to the end
-        if (a.status === "dismissed" && b.status !== "dismissed") return 1;
-        if (b.status === "dismissed" && a.status !== "dismissed") return -1;
-        const pa = a.priority ?? 99;
-        const pb = b.priority ?? 99;
-        if (pa !== pb) return pa - pb;
-        const da = a.due_date ? new Date(a.due_date).getTime() : Infinity;
-        const db = b.due_date ? new Date(b.due_date).getTime() : Infinity;
-        return da - db;
+      .map((iv) => {
+        const student = studentById.get(iv.student_id)!;
+        const studentInds = indicatorsByStudent.get(iv.student_id) ?? [];
+        return {
+          intervention: iv,
+          student,
+          campusName: campusById.get(student.campus_id) ?? "—",
+          leverage: computeLeverage(iv, studentInds),
+        };
       })
-      .map((iv) => ({
-        intervention: iv,
-        student: studentById.get(iv.student_id)!,
-        campusName: campusById.get(studentById.get(iv.student_id)?.campus_id ?? "") ?? "—",
-      }));
-  }, [interventions, filters, showDismissed, studentById, campusById]);
+      .sort((a, b) => {
+        // Dismissed to the end (always)
+        const ad = a.intervention.status === "dismissed";
+        const bd = b.intervention.status === "dismissed";
+        if (ad && !bd) return 1;
+        if (bd && !ad) return -1;
+
+        if (sortMode === "leverage") {
+          // Score-based interventions first, ranked by smallest gap.
+          // Non-score interventions fall back to the pathway sort below.
+          const al = a.leverage?.distance ?? null;
+          const bl = b.leverage?.distance ?? null;
+          if (al !== null && bl !== null) return al - bl;
+          if (al !== null) return -1;
+          if (bl !== null) return 1;
+        }
+
+        const pa = a.intervention.priority ?? 99;
+        const pb = b.intervention.priority ?? 99;
+        if (pa !== pb) return pa - pb;
+        const da = a.intervention.due_date ? new Date(a.intervention.due_date).getTime() : Infinity;
+        const db = b.intervention.due_date ? new Date(b.intervention.due_date).getTime() : Infinity;
+        return da - db;
+      });
+  }, [interventions, filters, showDismissed, sortMode, studentById, campusById, indicatorsByStudent]);
 
   const handleStatusChange = (id: string, newStatus: InterventionStatus) => {
     // Optimistic update
@@ -941,21 +993,21 @@ export const InterventionsPage = ({
   return (
     <div className="space-y-6">
       {/* Page header */}
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="text-[24px] font-semibold text-neutral-900">Interventions</h1>
-          <p className="text-[14px] text-neutral-600 mt-1">
+          <h1 className="text-[22px] sm:text-[24px] font-semibold text-neutral-900">Interventions</h1>
+          <p className="text-[13px] sm:text-[14px] text-neutral-600 mt-1">
             Counselor action list — at-risk seniors grouped by credential pathway
           </p>
         </div>
-        <div className="flex items-center gap-3 flex-shrink-0">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 sm:flex-shrink-0">
           {refreshMsg && (
             <span className="text-[13px] text-neutral-500">{refreshMsg}</span>
           )}
           <button
             onClick={handleRefresh}
             disabled={isRefreshing}
-            className="flex items-center gap-2 px-4 py-2 rounded-md bg-neutral-0 border border-neutral-200 text-[13px] font-medium text-neutral-700 hover:border-neutral-300 hover:bg-neutral-50 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+            className="flex items-center justify-center gap-2 px-4 py-2 rounded-md bg-neutral-0 border border-neutral-200 text-[13px] font-medium text-neutral-700 hover:border-neutral-300 hover:bg-neutral-50 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
           >
             <RefreshCw className={cn("w-3.5 h-3.5", isRefreshing && "animate-spin")} />
             Refresh recommendations
@@ -1033,18 +1085,52 @@ export const InterventionsPage = ({
         onToggleDismissed={() => setShowDismissed((v) => !v)}
       />
 
-      {/* Dismissed count hint */}
-      {dismissedCount > 0 && !showDismissed && (
-        <p className="text-[12px] text-neutral-400 -mt-3">
-          {dismissedCount} dismissed intervention{dismissedCount !== 1 ? "s" : ""} hidden.{" "}
+      {/* Sort + dismissed-count row */}
+      <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-2 -mt-3">
+        {dismissedCount > 0 && !showDismissed ? (
+          <p className="text-[12px] text-neutral-400">
+            {dismissedCount} dismissed intervention{dismissedCount !== 1 ? "s" : ""} hidden.{" "}
+            <button
+              onClick={() => setShowDismissed(true)}
+              className="underline hover:text-neutral-600"
+            >
+              Show
+            </button>
+          </p>
+        ) : <span />}
+        <div
+          role="tablist"
+          aria-label="Sort interventions"
+          className="inline-flex self-end sm:self-auto rounded-md border border-neutral-200 bg-neutral-0 p-0.5 text-[12px] font-medium"
+        >
           <button
-            onClick={() => setShowDismissed(true)}
-            className="underline hover:text-neutral-600"
+            role="tab"
+            aria-selected={sortMode === "pathway"}
+            onClick={() => setSortMode("pathway")}
+            className={cn(
+              "px-2.5 py-1 rounded transition-colors",
+              sortMode === "pathway"
+                ? "bg-teal-600 text-neutral-0"
+                : "text-neutral-600 hover:text-neutral-900"
+            )}
           >
-            Show
+            By pathway
           </button>
-        </p>
-      )}
+          <button
+            role="tab"
+            aria-selected={sortMode === "leverage"}
+            onClick={() => setSortMode("leverage")}
+            className={cn(
+              "px-2.5 py-1 rounded transition-colors",
+              sortMode === "leverage"
+                ? "bg-teal-600 text-neutral-0"
+                : "text-neutral-600 hover:text-neutral-900"
+            )}
+          >
+            By leverage
+          </button>
+        </div>
+      </div>
 
       {/* Intervention list */}
       <div className={cn("transition-opacity duration-150", isPending && "opacity-60")}>

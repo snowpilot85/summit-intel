@@ -385,15 +385,27 @@ function generateIndicators(
           notes: `Enrolled in ${cte.pathway} — ${cte.cert} exam scheduled`,
         })
       } else {
-        const inProgressType = pick<IndicatorType>(['college_prep_ela', 'college_prep_math', 'dual_credit_ela'])
+        // Mix of score-bearing (SAT/ACT/TSI) and course-based pathways.
+        // Score-bearing rows drive the Interventions leverage pill —
+        // realistic sub-threshold scores via getScore(type, false).
+        // Score-bearing rows use status='not_met' (they took the test,
+        // didn't pass) so the student stays at_risk; using 'in_progress'
+        // would promote them to on_track via lib/ccmr.ts and skip the
+        // seed's intervention generator, leaving no intervention to
+        // attach the leverage pill to.
+        const inProgressType = pick<IndicatorType>([
+          ...SCORE_BASED_INPROGRESS_TYPES,
+          ...COURSE_BASED_TYPES,
+        ])
+        const scoreBased = isScoreBased(inProgressType)
         indicators.push({
           student_id: studentId,
           indicator_type: inProgressType,
-          status: 'in_progress',
+          status: scoreBased ? 'not_met' : 'in_progress',
           met_date: null,
-          score: null,
-          threshold: null,
-          course_grade: pick(['A', 'B', 'B', 'C', 'C', 'D']),
+          score: scoreBased ? getScore(inProgressType, false) : null,
+          threshold: scoreBased ? getThreshold(inProgressType) : null,
+          course_grade: scoreBased ? null : pick(['A', 'B', 'B', 'C', 'C', 'D']),
           exam_date: null,
           source_year: '2025-26',
           notes: null,
@@ -402,17 +414,24 @@ function generateIndicators(
     }
     // else: truly at-risk, no indicators at all
   } else if (grade === 11) {
-    // Juniors — some in-progress work
+    // Juniors — some in-progress work. Same score-vs-course split as
+    // the senior branch, plus IBC for CTE-enrolled juniors.
     if (chance(0.55)) {
-      const type = pick<IndicatorType>(['dual_credit_ela', 'dual_credit_math', 'college_prep_ela', 'ibc'])
+      const type = pick<IndicatorType>([
+        ...SCORE_BASED_INPROGRESS_TYPES,
+        ...COURSE_BASED_TYPES,
+        'ibc',
+      ])
+      const isMet = chance(0.3)
+      const scoreBased = isScoreBased(type)
       indicators.push({
         student_id: studentId,
         indicator_type: type,
-        status: chance(0.3) ? 'met' : 'in_progress',
-        met_date: chance(0.3) ? randomDate('2025-08-01', '2026-03-01') : null,
-        score: null,
-        threshold: null,
-        course_grade: type !== 'ibc' ? pick(['A', 'B', 'B+', 'C']) : null,
+        status: isMet ? 'met' : 'in_progress',
+        met_date: isMet ? randomDate('2025-08-01', '2026-03-01') : null,
+        score: scoreBased ? getScore(type, isMet) : null,
+        threshold: scoreBased ? getThreshold(type) : null,
+        course_grade: scoreBased || type === 'ibc' ? null : pick(['A', 'B', 'B+', 'C']),
         exam_date: type === 'ibc' && cte ? cte.examWindow : null,
         source_year: '2025-26',
         notes: null,
@@ -467,32 +486,47 @@ function pickBonusIndicator(existing: IndicatorType[]): IndicatorType | null {
   return available.length > 0 ? pick(available) : null
 }
 
+// Per-indicator score ranges. Thresholds match lib/ccmr-rules.ts and
+// lib/interventions/leverage.ts so that getScore(type, false) values
+// land in the realistic "5-40 below threshold" leverage range.
+const SCORE_INFO: Partial<Record<IndicatorType, { met: [number, number]; threshold: number; minBelow: number }>> = {
+  tsi_reading: { met: [945, 990], threshold: 945, minBelow: 40 },
+  tsi_math:    { met: [950, 990], threshold: 950, minBelow: 40 },
+  sat_reading: { met: [480, 700], threshold: 480, minBelow: 40 },
+  sat_math:    { met: [530, 750], threshold: 530, minBelow: 40 },
+  // ACT is 1-36 — gap below threshold is small.
+  act_reading: { met: [19, 32],   threshold: 19,  minBelow: 7 },
+  act_math:    { met: [19, 32],   threshold: 19,  minBelow: 7 },
+  ap_exam:     { met: [3, 5],     threshold: 3,   minBelow: 2 },
+  ib_exam:     { met: [4, 7],     threshold: 4,   minBelow: 3 },
+}
+
 function getScore(type: IndicatorType, met: boolean): number | null {
-  const scores: Partial<Record<IndicatorType, { met: [number, number]; threshold: number }>> = {
-    tsi_reading: { met: [351, 390], threshold: 351 },
-    tsi_math:    { met: [350, 390], threshold: 350 },
-    sat_reading: { met: [480, 700], threshold: 480 },
-    sat_math:    { met: [530, 750], threshold: 530 },
-    act_reading: { met: [19, 35], threshold: 19 },
-    act_math:    { met: [19, 34], threshold: 19 },
-    ap_exam:     { met: [3, 5], threshold: 3 },
-    ib_exam:     { met: [4, 7], threshold: 4 },
-  }
-  const info = scores[type]
+  const info = SCORE_INFO[type]
   if (!info) return null
   return met
     ? randomInt(info.met[0], info.met[1])
-    : randomInt(info.met[0] - 40, info.threshold - 1)
+    : randomInt(info.threshold - info.minBelow, info.threshold - 1)
 }
 
 function getThreshold(type: IndicatorType): number | null {
-  const thresholds: Partial<Record<IndicatorType, number>> = {
-    tsi_reading: 351, tsi_math: 350,
-    sat_reading: 480, sat_math: 530,
-    act_reading: 19, act_math: 19,
-    ap_exam: 3, ib_exam: 4,
-  }
-  return thresholds[type] ?? null
+  return SCORE_INFO[type]?.threshold ?? null
+}
+
+// Indicator types whose progress is course-based (course_grade column),
+// not score-based. Used by the at-risk-senior / junior in-progress
+// branches below to pick the right column shape.
+const COURSE_BASED_TYPES: IndicatorType[] = [
+  'college_prep_ela', 'college_prep_math',
+  'dual_credit_ela', 'dual_credit_math',
+]
+const SCORE_BASED_INPROGRESS_TYPES: IndicatorType[] = [
+  'tsi_reading', 'tsi_math',
+  'sat_reading', 'sat_math',
+  'act_reading', 'act_math',
+]
+function isScoreBased(type: IndicatorType): boolean {
+  return SCORE_BASED_INPROGRESS_TYPES.includes(type)
 }
 
 // ============================================================
@@ -557,7 +591,9 @@ function generateInterventions(
         interventions.push({
           student_id: student.id,
           campus_id: student.campus_id,
-          pathway_type: 'tsi_reading',
+          // 'tsi' (umbrella) so the Interventions leverage helper can pick
+          // the closest of either subject when computing distance-to-threshold.
+          pathway_type: 'tsi',
           title: 'Schedule TSIA testing session',
           description: 'Student has never attempted the TSIA. Schedule before spring testing window closes.',
           status: 'recommended',

@@ -16,6 +16,25 @@ export async function getIndicatorsForStudents(
   return data ?? []
 }
 
+/**
+ * Like getIndicatorsForStudents but returns ALL statuses including
+ * not_attempted/not_met. Needed by the interventions leverage calculation,
+ * which cares about gaps between current scores and thresholds even for
+ * not-yet-passing attempts.
+ */
+export async function getAllIndicatorsForStudents(
+  client: TypedSupabaseClient,
+  studentIds: string[]
+): Promise<IndicatorRow[]> {
+  if (studentIds.length === 0) return []
+  const { data, error } = await client
+    .from('ccmr_indicators')
+    .select('*')
+    .in('student_id', studentIds)
+  if (error) throw error
+  return data ?? []
+}
+
 export async function getStudentIndicators(
   client: TypedSupabaseClient,
   studentId: string

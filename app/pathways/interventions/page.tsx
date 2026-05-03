@@ -10,6 +10,7 @@ import { getInterventions } from "@/lib/db/interventions";
 import { getStudentsByIds } from "@/lib/db/students";
 import { getCampuses } from "@/lib/db/campuses";
 import { getUserContext } from "@/lib/db/users";
+import { getAllIndicatorsForStudents } from "@/lib/db/indicators";
 
 export const metadata: Metadata = {
   title: "Interventions | Summit Insights",
@@ -46,7 +47,10 @@ export default async function Page() {
   );
 
   const studentIds = [...new Set(activeInterventions.map((i) => i.student_id))];
-  const students = await getStudentsByIds(queryClient, studentIds);
+  const [students, indicators] = await Promise.all([
+    getStudentsByIds(queryClient, studentIds),
+    getAllIndicatorsForStudents(queryClient, studentIds),
+  ]);
 
   const seniorCount = seniorCountResult.count ?? 0;
 
@@ -68,6 +72,7 @@ export default async function Page() {
           interventions={activeInterventions}
           students={students}
           campuses={campuses}
+          indicators={indicators}
           seniorCount={seniorCount}
           hasCCMR={userCtx.hasCCMR}
         />
