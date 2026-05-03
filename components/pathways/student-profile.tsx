@@ -284,15 +284,15 @@ const StudentHeader = ({ student, campusName, graduationDate, hasCCMR, pathway }
         </div>
       )}
 
-      <div className="bg-neutral-0 border border-neutral-200 rounded-lg p-6">
+      <div className="bg-neutral-0 border border-neutral-200 rounded-lg p-4 sm:p-6">
         <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
           {/* Left: Avatar + info */}
-          <div className="flex items-start gap-4">
-            <div className="w-16 h-16 bg-teal-100 rounded-full flex items-center justify-center flex-shrink-0">
-              <span className="text-[22px] font-bold text-teal-700 uppercase">{initials}</span>
+          <div className="flex items-start gap-3 sm:gap-4 min-w-0">
+            <div className="w-12 h-12 sm:w-16 sm:h-16 bg-teal-100 rounded-full flex items-center justify-center flex-shrink-0">
+              <span className="text-[18px] sm:text-[22px] font-bold text-teal-700 uppercase">{initials}</span>
             </div>
-            <div>
-              <h1 className="text-[24px] font-semibold text-neutral-900">
+            <div className="min-w-0">
+              <h1 className="text-[20px] sm:text-[24px] font-semibold text-neutral-900 break-words">
                 {student.first_name} {student.last_name}
               </h1>
               <p className="text-[13px] text-neutral-500 mt-0.5">TSDS #{student.tsds_id}</p>
@@ -554,8 +554,8 @@ const CCMRIndicatorGrid = ({ indicators }: { indicators: IndicatorRow[] }) => {
                 {label}
               </h3>
             </div>
-            <div className="border border-neutral-200 rounded-lg overflow-hidden">
-              <table className="w-full">
+            <div className="border border-neutral-200 rounded-lg overflow-x-auto">
+              <table className="w-full min-w-[480px]">
                 <tbody>
                   {items.map((item, idx) => {
                     if (item.kind === "single") {
