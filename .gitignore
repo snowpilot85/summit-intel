@@ -28,3 +28,4 @@ yarn-error.log*
 next-env.d.ts.DS_Store
 **/.DS_Store
 supabase/.temp/
+next-env.d.ts
