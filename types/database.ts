@@ -213,6 +213,13 @@ export type StudentRow = {
   last_name: string
   grade_level: number
   graduation_year: number
+  // Phase 1 CCMR — cohort modeling. cohort_year drives methodology
+  // routing; entry_grade_9_year is the canonical PEIMS field. The
+  // entry_grade_9_year column stays nullable until the SIS
+  // integration backfills it from PEIMS; cohort_year is required.
+  entry_grade_9_year: number | null
+  cohort_year: number
+  cohort_status: CohortStatus
   is_eb: boolean
   is_econ_disadvantaged: boolean
   is_special_ed: boolean
@@ -514,6 +521,183 @@ export type WorkBasedLearningInsert = Omit<WorkBasedLearningRow, 'id' | 'created
 export type WorkBasedLearningUpdate = Partial<WorkBasedLearningInsert>
 
 // ============================================================
+// PHASE 1 CCMR — methodology config, indicator results, status
+// ============================================================
+
+export type CohortStatus = 'active' | 'graduated' | 'withdrew' | 'transferred'
+
+export type MethodologyKey =
+  | 'tx_binary'
+  | 'tx_tiered_2030'
+  | (string & {})  // accept future methodology keys (e.g. tx_weighted_2033)
+
+export type IndicatorCategory = 'college' | 'career' | 'military'
+
+export type TieredStatus = 'foundational' | 'demonstrated' | 'advanced' | 'none'
+
+export type BinaryStatus = 'met' | 'not_met'
+
+export type CcmrIndicatorResultStatus =
+  | TieredStatus
+  | BinaryStatus
+
+export type CcmrIndicatorResultType =
+  | 'tsi'
+  | 'ibc'
+  | 'level_1_certificate'
+  | 'level_2_certificate'
+  | 'dual_credit'
+  | 'ap'
+  | 'ib'
+  | 'onramps'
+  | 'associate_degree'
+  | 'jrotc'
+  | 'military_enlistment'
+  | 'sped_advanced_diploma'
+  | 'workforce_ready_iep'
+
+export type TsiPathwaySource = 'sat' | 'act' | 'tsia' | 'cpc'
+
+export interface CcmrIndicatorResultSourceData {
+  tsi_pathway_source?: TsiPathwaySource
+  ibc_tier?: 1 | 2 | 3
+  certificate_program?: string
+  afqt_score?: number
+  // Open-ended; ingestion may attach additional provenance fields.
+  [key: string]: unknown
+}
+
+export type StateAccountabilityMethodologyRow = {
+  id: string
+  state_code: string
+  methodology_key: string
+  effective_cohort_year_min: number | null
+  effective_cohort_year_max: number | null
+  display_name: string
+  description: string | null
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export type CcmrIndicatorResultRow = {
+  id: string
+  student_id: string
+  methodology_key: string
+  indicator_type: CcmrIndicatorResultType
+  indicator_category: IndicatorCategory
+  status: CcmrIndicatorResultStatus
+  source_data: CcmrIndicatorResultSourceData
+  calculated_at: string
+  created_at: string
+  updated_at: string
+}
+
+export type StudentCcmrStatusRow = {
+  student_id: string
+  methodology_key: string
+  highest_level: CcmrIndicatorResultStatus
+  highest_level_category: IndicatorCategory | null
+  highest_level_source_indicator_id: string | null
+  calculated_at: string
+  created_at: string
+  updated_at: string
+}
+
+export type StateAccountabilityMethodologyInsert =
+  Omit<StateAccountabilityMethodologyRow, 'id' | 'created_at' | 'updated_at'> & { id?: string }
+export type StateAccountabilityMethodologyUpdate = Partial<StateAccountabilityMethodologyInsert>
+
+export type CcmrIndicatorResultInsert =
+  Omit<CcmrIndicatorResultRow, 'id' | 'created_at' | 'updated_at' | 'calculated_at'> & {
+    id?: string
+    calculated_at?: string
+  }
+export type CcmrIndicatorResultUpdate = Partial<CcmrIndicatorResultInsert>
+
+export type StudentCcmrStatusInsert =
+  Omit<StudentCcmrStatusRow, 'created_at' | 'updated_at' | 'calculated_at'> & {
+    calculated_at?: string
+  }
+export type StudentCcmrStatusUpdate = Partial<StudentCcmrStatusInsert>
+
+// ============================================================
+// SIS-READINESS — external IDs + sync job audit log
+//
+// Plumbing for future SIS / College Board / THECB / TEA connectors.
+// Every external data source maps to a source_type enum value;
+// every ingestion run logs a sync_jobs row. See docs/architecture.md.
+// ============================================================
+
+export type ExternalIdSourceType =
+  | 'sis_skyward'
+  | 'sis_frontline'
+  | 'sis_powerschool'
+  | 'sis_infinite_campus'
+  | 'sis_other'
+  | 'college_board_ssd'
+  | 'thecb_unique_id'
+  | 'state_tea_id'
+  | 'peims_id'
+  | 'manual'
+
+export type SyncJobType =
+  | 'student_sync'
+  | 'assessment_import'
+  | 'credential_import'
+  | 'csv_student_upload'
+  | 'csv_assessment_upload'
+  | 'manual_recompute'
+
+export type SyncJobStatus =
+  | 'pending'
+  | 'running'
+  | 'success'
+  | 'partial_failure'
+  | 'failed'
+
+export type StudentExternalIdRow = {
+  id: string
+  student_id: string
+  source_type: ExternalIdSourceType
+  external_id: string
+  is_primary: boolean
+  created_at: string
+  updated_at: string
+}
+
+export type StudentExternalIdInsert =
+  Omit<StudentExternalIdRow, 'id' | 'created_at' | 'updated_at'> & { id?: string }
+export type StudentExternalIdUpdate = Partial<StudentExternalIdInsert>
+
+export type SyncJobRow = {
+  id: string
+  source_type: ExternalIdSourceType
+  source_identifier: string | null
+  job_type: SyncJobType
+  district_id: string
+  started_at: string
+  finished_at: string | null
+  status: SyncJobStatus
+  rows_inserted: number
+  rows_updated: number
+  rows_failed: number
+  rows_skipped: number
+  error_log: Record<string, unknown> | Record<string, unknown>[] | null
+  triggered_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type SyncJobInsert =
+  Omit<SyncJobRow, 'id' | 'created_at' | 'updated_at' | 'started_at'> & {
+    id?: string
+    started_at?: string
+  }
+export type SyncJobUpdate = Partial<SyncJobInsert>
+
+
+// ============================================================
 // CCMR OUTCOMES BONUS — TEA Annual Graduates Early Counts
 // Source: tea.texas.gov performance reporting, refreshed annually each August.
 // ============================================================
@@ -694,6 +878,36 @@ export interface Database {
         Update: CcmrObDataUpdate
         Relationships: []
       }
+      state_accountability_methodologies: {
+        Row: Indexed<StateAccountabilityMethodologyRow>
+        Insert: StateAccountabilityMethodologyInsert
+        Update: StateAccountabilityMethodologyUpdate
+        Relationships: []
+      }
+      ccmr_indicator_results: {
+        Row: Indexed<CcmrIndicatorResultRow>
+        Insert: CcmrIndicatorResultInsert
+        Update: CcmrIndicatorResultUpdate
+        Relationships: []
+      }
+      student_ccmr_status: {
+        Row: Indexed<StudentCcmrStatusRow>
+        Insert: StudentCcmrStatusInsert
+        Update: StudentCcmrStatusUpdate
+        Relationships: []
+      }
+      student_external_ids: {
+        Row: Indexed<StudentExternalIdRow>
+        Insert: StudentExternalIdInsert
+        Update: StudentExternalIdUpdate
+        Relationships: []
+      }
+      sync_jobs: {
+        Row: Indexed<SyncJobRow>
+        Insert: SyncJobInsert
+        Update: SyncJobUpdate
+        Relationships: []
+      }
     }
     Views: {
       v_campus_ccmr_summary: {
@@ -702,6 +916,30 @@ export interface Database {
       }
       v_indicator_breakdown: {
         Row: Indexed<IndicatorBreakdownRow>
+        Relationships: []
+      }
+      v_ccmr_score_tiered: {
+        Row: Indexed<{
+          district_id: string
+          campus_id: string
+          cohort_year: number
+          annual_grads: number
+          foundational_plus: number
+          demonstrated_plus: number
+          advanced_count: number
+          ccmr_raw_score: number
+        }>
+        Relationships: []
+      }
+      v_ccmr_score_binary: {
+        Row: Indexed<{
+          district_id: string
+          campus_id: string
+          cohort_year: number
+          annual_grads: number
+          ccmr_met: number
+          ccmr_rate: number
+        }>
         Relationships: []
       }
     }
