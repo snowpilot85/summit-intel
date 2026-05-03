@@ -269,6 +269,12 @@ function generateStudents(): { students: StudentSeed[]; indicators: IndicatorSee
           last_name: lastName,
           grade_level: grade,
           graduation_year: gradeToGradYear(grade),
+          // cohort_year became NOT NULL in 20260428000004; for the seed
+          // we mirror graduation_year since the demo cohort is the
+          // student's expected graduation cohort.
+          entry_grade_9_year: gradeToGradYear(grade) - 4,
+          cohort_year: gradeToGradYear(grade),
+          cohort_status: 'active' as const,
           is_eb: isEb,
           is_econ_disadvantaged: isEcon,
           is_special_ed: isSped,
